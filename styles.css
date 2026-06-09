@@ -497,7 +497,7 @@ input::-webkit-calendar-picker-indicator:hover {
 
 /* ── DASHBOARD GRID ───────────────────────────────────────── */
 .dashboard-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; }
-.dashboard-col  { display: flex; flex-direction: column; gap: 22px; }
+.dashboard-col  { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 
 /* ── CLOCK ────────────────────────────────────────────────── */
 .clock-card {
