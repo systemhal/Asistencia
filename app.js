@@ -98,6 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   setupAdminTabs();
   setupEditModalListeners();
+  setupChangePinModal();
+  syncEmployeesFromGoogleSheets();
 });
 
 /* ==========================================================================
@@ -483,7 +485,7 @@ function registerAttendanceAction(action) {
   updateAdminView();
 }
 // Enviar nuevo empleado a Google Sheets
-function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd) {
+function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd, pin = "1234") {
   // Si no hay URL de Sheet configurada, no hace nada
   if (!googleScriptUrl) return; 
 
@@ -499,7 +501,8 @@ function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart,
     workStart: workStart,
     workEnd: workEnd,
     breakStart: breakStart,
-    breakEnd: breakEnd
+    breakEnd: breakEnd,
+    pin: pin
   };
   
   fetch(googleScriptUrl, {
@@ -520,12 +523,13 @@ function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart,
 }
 
 // Sincronizar edición de empleado en Google Sheets
-function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStart, breakEnd) {
+function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStart, breakEnd, pin) {
   if (!googleScriptUrl) return;
 
   const employee = employeesDatabase[dni] || {};
   const age = employee.age || "—";
   const gender = employee.gender || "—";
+  const finalPin = pin || employee.pin || "1234";
 
   showToast('warning', 'Sincronizando...', 'Actualizando horarios en Google Sheets.');
   
@@ -539,7 +543,8 @@ function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStar
     workStart: workStart,
     workEnd: workEnd,
     breakStart: breakStart,
-    breakEnd: breakEnd
+    breakEnd: breakEnd,
+    pin: finalPin
   };
   
   fetch(googleScriptUrl, {
@@ -556,6 +561,126 @@ function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStar
   .catch(err => {
     console.error('Error actualizando personal:', err);
     showToast('error', 'Error de Nube', 'No se pudo actualizar en el Sheet.');
+  });
+}
+
+// Sincronizar la base de datos de colaboradores desde el Google Sheets
+function syncEmployeesFromGoogleSheets() {
+  if (!googleScriptUrl) return Promise.resolve();
+  
+  return fetch(`${googleScriptUrl}?action=get_employees`)
+    .then(res => res.json())
+    .then(res => {
+      if (res.status === "ok" && Array.isArray(res.data)) {
+        res.data.forEach(emp => {
+          // Si el colaborador ya existe, actualizar todos sus datos (incluyendo PIN)
+          // Si no existe, crearlo
+          employeesDatabase[emp.dni] = {
+            name: emp.name,
+            role: emp.role,
+            age: emp.age,
+            gender: emp.gender,
+            pin: emp.pin || "1234",
+            workStart: emp.workStart || "08:00",
+            workEnd: emp.workEnd || "17:00",
+            breakStart: emp.breakStart || "13:00",
+            breakEnd: emp.breakEnd || "14:00"
+          };
+          
+          // Asegurarse de que tenga estado de asistencia básico si no existía
+          if (!attendanceState[emp.dni]) {
+            attendanceState[emp.dni] = {
+              action: 'Desconectado',
+              timestamp: null,
+              history: []
+            };
+          }
+        });
+        
+        saveState();
+        updateAdminView();
+        updateReportEmployeeSelect();
+        console.log("Colaboradores sincronizados desde Google Sheets.");
+      }
+    })
+    .catch(err => {
+      console.error("Error al sincronizar colaboradores desde Google Sheets:", err);
+    });
+}
+
+// Configurar el Modal de Cambio de PIN para los empleados
+function setupChangePinModal() {
+  const btnTrigger = document.getElementById('btn-change-pin-trigger');
+  const modal = document.getElementById('modal-change-pin');
+  const form = document.getElementById('form-change-pin');
+  const btnCancel = document.getElementById('btn-change-pin-cancel');
+  const errorMsg = document.getElementById('change-pin-error-msg');
+
+  if (!btnTrigger || !modal || !form || !btnCancel) return;
+
+  btnTrigger.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    form.reset();
+    errorMsg.classList.add('hidden');
+  });
+
+  btnCancel.addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    errorMsg.classList.add('hidden');
+
+    const currentPin = document.getElementById('change-pin-current').value.trim();
+    const newPin = document.getElementById('change-pin-new').value.trim();
+    const confirmPin = document.getElementById('change-pin-confirm').value.trim();
+
+    if (!currentSession || !currentSession.dni) {
+      showToast('error', 'Error', 'No hay sesión de colaborador activa.');
+      return;
+    }
+
+    const dni = currentSession.dni;
+    const employee = employeesDatabase[dni];
+
+    if (!employee) {
+      showToast('error', 'Error', 'El colaborador no existe en la base de datos.');
+      return;
+    }
+
+    // Validar PIN actual
+    if (employee.pin !== currentPin) {
+      errorMsg.textContent = 'El PIN actual es incorrecto.';
+      errorMsg.classList.remove('hidden');
+      return;
+    }
+
+    // Validar coincidencia de PIN nuevo
+    if (newPin !== confirmPin) {
+      errorMsg.textContent = 'Los nuevos PINs no coinciden.';
+      errorMsg.classList.remove('hidden');
+      return;
+    }
+
+    // Validar longitud
+    if (newPin.length !== 4 || isNaN(parseInt(newPin, 10))) {
+      errorMsg.textContent = 'El nuevo PIN debe ser un número de 4 dígitos.';
+      errorMsg.classList.remove('hidden');
+      return;
+    }
+
+    // Cambiar PIN
+    employee.pin = newPin;
+    saveState();
+
+    // Enviar cambio a Google Sheets
+    if (googleScriptUrl) {
+      sendUpdateToGoogleSheets(dni, employee.name, employee.role, employee.workStart, employee.workEnd, employee.breakStart, employee.breakEnd, newPin);
+    }
+
+    modal.classList.add('hidden');
+    showToast('success', 'PIN Cambiado ✅', 'Tu PIN de seguridad se actualizó correctamente.');
   });
 }
 /* ==========================================================================
@@ -752,7 +877,7 @@ function setupEventListeners() {
       saveState();
       updateAdminView();
       if (googleScriptUrl) {
-         sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd);
+         sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd, "1234");
       }
       
       // Limpiar formulario y lanzar éxito
@@ -943,6 +1068,7 @@ function testGoogleScriptConnection() {
     testConnectionResult.textContent = "¡Conexión establecida con éxito! El script responde.";
     testConnectionResult.classList.add('success');
     showToast('success', 'Conexión exitosa', 'El script de Google Sheets está activo.');
+    syncEmployeesFromGoogleSheets();
   })
   .catch(err => {
     console.error(err);
@@ -1718,8 +1844,10 @@ function setupAdminTabs() {
   const btnRefreshConsolidated = document.getElementById('btn-refresh-consolidated');
   if (btnRefreshConsolidated) {
     btnRefreshConsolidated.addEventListener('click', () => {
-      loadConsolidatedReport();
-      showToast('info', 'Actualizando...', 'Sincronizando reporte consolidado.');
+      syncEmployeesFromGoogleSheets().then(() => {
+        loadConsolidatedReport();
+      });
+      showToast('info', 'Actualizando...', 'Sincronizando colaboradores y reporte consolidado.');
     });
   }
 
@@ -1829,7 +1957,7 @@ function setupEditModalListeners() {
 
     saveState();
     if (googleScriptUrl) {
-      sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStart, breakEnd);
+      sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStart, breakEnd, pin);
     }
     modal.classList.add('hidden');
     showToast('success', 'Colaborador Actualizado', `Los datos y horarios de ${name} fueron guardados.`);

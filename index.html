@@ -107,10 +107,16 @@
             </div>
           </div>
           
-          <button id="btn-logout" class="btn-outline">
-            <span>Cerrar Sesión</span>
-            <span class="material-symbols-rounded">logout</span>
-          </button>
+          <div style="display: flex; gap: 10px;">
+            <button id="btn-change-pin-trigger" class="btn-outline" style="display: flex; align-items: center; gap: 6px;">
+              <span class="material-symbols-rounded">lock_reset</span>
+              <span>Cambiar PIN</span>
+            </button>
+            <button id="btn-logout" class="btn-outline" style="display: flex; align-items: center; gap: 6px;">
+              <span>Cerrar Sesión</span>
+              <span class="material-symbols-rounded">logout</span>
+            </button>
+          </div>
         </div>
 
         <div class="dashboard-grid">
@@ -698,6 +704,45 @@
           <div class="modal-buttons">
             <button type="button" id="btn-edit-cancel" class="btn-outline">Cancelar</button>
             <button type="submit" class="btn-primary">Guardar Cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- CHANGE PIN MODAL (FOR EMPLOYEES) -->
+    <div id="modal-change-pin" class="modal-overlay hidden">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 390px; width: 90%;">
+        <div class="card-header text-center">
+          <span class="material-symbols-rounded icon-hero text-gradient">lock_reset</span>
+          <h3>Cambiar PIN de Seguridad</h3>
+          <p>Modifica tu PIN de 4 dígitos para acceder al sistema</p>
+        </div>
+        <form id="form-change-pin" onsubmit="event.preventDefault();">
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="change-pin-current">PIN Actual</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">lock</span>
+              <input type="password" id="change-pin-current" pattern="[0-9]{4}" required maxlength="4" placeholder="Ej. 1234" inputmode="numeric">
+            </div>
+          </div>
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="change-pin-new">Nuevo PIN (4 dígitos)</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">pin</span>
+              <input type="password" id="change-pin-new" pattern="[0-9]{4}" required maxlength="4" placeholder="Ej. 9876" inputmode="numeric">
+            </div>
+          </div>
+          <div class="input-group" style="margin-bottom: 20px;">
+            <label for="change-pin-confirm">Confirmar Nuevo PIN</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">check_circle</span>
+              <input type="password" id="change-pin-confirm" pattern="[0-9]{4}" required maxlength="4" placeholder="Repite el nuevo PIN" inputmode="numeric">
+            </div>
+            <p id="change-pin-error-msg" class="helper-text error-text hidden">Los PINs no coinciden o el PIN actual es incorrecto</p>
+          </div>
+          <div class="modal-buttons">
+            <button type="button" id="btn-change-pin-cancel" class="btn-outline">Cancelar</button>
+            <button type="submit" class="btn-primary">Guardar PIN</button>
           </div>
         </form>
       </div>
