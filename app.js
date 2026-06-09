@@ -978,15 +978,15 @@ function updateAdminView() {
       <td class="table-timestamp">${lastMarkTime}</td>
       <td>
         <div style="display: flex; gap: 8px; align-items: center; white-space: nowrap;">
-          <button class="btn-table-action" onclick="forceLogoutEmployee('${dni}')" ${state.action === 'Desconectado' ? 'disabled' : ''} style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
+          <button class="btn-table-action" onclick="forceLogoutEmployee('${dni}')" ${state.action === 'Desconectado' ? 'disabled' : ''} title="Forzar Salida" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
             <span class="material-symbols-rounded" style="font-size: 16px;">logout</span>
             <span>Forzar Salida</span>
           </button>
-          <button class="btn-table-action" onclick="openEditEmployeeModal('${dni}')" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
+          <button class="btn-table-action" onclick="openEditEmployeeModal('${dni}')" title="Editar" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
             <span class="material-symbols-rounded" style="font-size: 16px;">edit</span>
             <span>Editar</span>
           </button>
-          <button class="btn-table-action" onclick="deleteEmployee('${dni}')" style="display: inline-flex; align-items: center; gap: 4px; color: #ff4d4d; border-color: #ff4d4d; white-space: nowrap;">
+          <button class="btn-table-action" onclick="deleteEmployee('${dni}')" title="Eliminar" style="display: inline-flex; align-items: center; gap: 4px; color: #ff4d4d; border-color: #ff4d4d; white-space: nowrap;">
             <span class="material-symbols-rounded" style="font-size: 16px;">delete</span>
             <span>Eliminar</span>
           </button>

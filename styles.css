@@ -675,16 +675,16 @@ input::-webkit-calendar-picker-indicator:hover {
 /* Admin table */
 .admin-table { width: 100%; border-collapse: collapse; text-align: left; }
 .admin-table th {
-  padding: 11px 15px;
+  padding: 10px 8px;
   color: var(--text-muted);
   font-weight: 600; font-size: 0.75rem;
   text-transform: uppercase; letter-spacing: 0.5px;
   border-bottom: 1px solid var(--border-color);
 }
 .admin-table td {
-  padding: 14px 15px;
+  padding: 10px 8px;
   border-bottom: 1px solid var(--border-color);
-  font-size: 0.88rem; vertical-align: middle;
+  font-size: 0.82rem; vertical-align: middle;
   color: var(--text-primary);
 }
 .admin-table tr:last-child td { border-bottom: none; }
@@ -709,7 +709,7 @@ input::-webkit-calendar-picker-indicator:hover {
 .btn-table-action {
   background: none; color: var(--primary);
   display: flex; align-items: center; gap: 4px;
-  font-size: 0.78rem; font-weight: 600;
+  font-size: 0.72rem; font-weight: 600;
 }
 .btn-table-action:hover { color: var(--primary-hover); text-decoration: underline; }
 .btn-table-action:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -882,10 +882,29 @@ input::-webkit-calendar-picker-indicator:hover {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ── RESPONSIVE ───────────────────────────────────────────── */
-@media (max-width:900px) {
+@media (max-width:1150px) {
   .dashboard-grid  { grid-template-columns: 1fr; }
   .admin-panel-layout { grid-template-columns: 1fr; }
   .admin-stats-grid   { grid-template-columns: 1fr; gap:13px; }
+  
+  /* Convert table action buttons to premium circular icon buttons on smaller screens */
+  .btn-table-action span:not(.material-symbols-rounded) {
+    display: none !important;
+  }
+  .btn-table-action {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    background: var(--surface-1) !important;
+    border: 1px solid var(--border-color) !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    transition: all 0.2s ease !important;
+  }
+  .btn-table-action:hover {
+    background: var(--surface-hover) !important;
+    text-decoration: none !important;
+  }
 }
 
 @media (max-width:500px) {
