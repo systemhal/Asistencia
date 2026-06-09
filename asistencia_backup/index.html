@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Asistencia</title>
+  <!-- Google Fonts & Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Background decorative glowing circles -->
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  
+  <div class="app-container">
+    
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="brand">
+        <img src="icono.jpeg" alt="Logo de la empresa" class="img-logo">
+        <div>
+          <h1>AsistenciaPro</h1>
+          <p>Portal de Registro de Jornada</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <!-- Toggle Claro / Oscuro -->
+        <button id="btn-theme-toggle" class="btn-theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
+          <span class="material-symbols-rounded" id="theme-icon">light_mode</span>
+        </button>
+        <button id="btn-admin-toggle" class="btn-icon-text">
+          <span class="material-symbols-rounded">admin_panel_settings</span>
+          <span>Admin</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      
+      <!-- VIEW 1: LOGIN (PANTALLA DE ACCESO) -->
+      <section id="view-login" class="card active glassmorphism animate-fade-in">
+        <div class="card-header text-center">
+          <span class="material-symbols-rounded icon-hero text-gradient">lock_open</span>
+          <h2>Acceso de Personal</h2>
+         <!--  <p>Ingresa tus datos para marcar asistencia</p>-->
+        </div>
+
+        <form id="form-login" onsubmit="event.preventDefault();">
+          <div class="input-group">
+            <label for="input-dni">Número de DNI</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">badge</span>
+              <input type="text" id="input-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 73507283" autocomplete="username" required maxlength="8">
+            </div>
+            <p id="dni-error-msg" class="helper-text error-text hidden">DNI no registrado en el sistema</p>
+          </div>
+
+          <div class="input-group">
+            <label for="input-pin">Código PIN de Seguridad</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">pin</span>
+              <input type="password" id="input-pin" inputmode="numeric" placeholder="••••" autocomplete="current-password" readonly required>
+            </div>
+            <p class="helper-text">* Para la beta, usa el PIN por defecto: 1234</p>
+          </div>
+
+          <!-- Teclado Virtual Numérico (Especial para móviles/tablets) -->
+          <div class="pinpad">
+            <button type="button" class="btn-pinpad" data-val="1">1</button>
+            <button type="button" class="btn-pinpad" data-val="2">2</button>
+            <button type="button" class="btn-pinpad" data-val="3">3</button>
+            <button type="button" class="btn-pinpad" data-val="4">4</button>
+            <button type="button" class="btn-pinpad" data-val="5">5</button>
+            <button type="button" class="btn-pinpad" data-val="6">6</button>
+            <button type="button" class="btn-pinpad" data-val="7">7</button>
+            <button type="button" class="btn-pinpad" data-val="8">8</button>
+            <button type="button" class="btn-pinpad" data-val="9">9</button>
+            <button type="button" class="btn-pinpad btn-pinpad-clear" data-val="clear">C</button>
+            <button type="button" class="btn-pinpad" data-val="0">0</button>
+            <button type="button" class="btn-pinpad btn-pinpad-back" data-val="back">
+              <span class="material-symbols-rounded">backspace</span>
+            </button>
+          </div>
+
+          <button type="submit" id="btn-submit-login" class="btn-primary">
+            <span>Iniciar Sesión</span>
+            <span class="material-symbols-rounded">login</span>
+          </button>
+        </form>
+      </section>
+
+      <!-- VIEW 2: EMPLOYEE DASHBOARD (TABLERO DE REGISTROS) -->
+      <section id="view-dashboard" class="card glassmorphism animate-fade-in hidden">
+        <div class="dashboard-user-bar">
+          <div class="user-info">
+            <div class="avatar-glow">
+              <span class="material-symbols-rounded">person</span>
+            </div>
+            <div>
+              <h2 id="employee-name">Cargando Nombre...</h2>
+              <span id="employee-badge-role" class="badge badge-role">DNI: <span id="employee-dni-display"></span></span>
+            </div>
+          </div>
+          
+          <button id="btn-logout" class="btn-outline">
+            <span>Cerrar Sesión</span>
+            <span class="material-symbols-rounded">logout</span>
+          </button>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- Columna Izquierda: Reloj y Estado Actual -->
+          <div class="dashboard-col">
+            <div class="clock-card card-inner text-center">
+              <div class="clock-display">
+                <span id="clock-time">00:00:00</span>
+                <span id="clock-ampm"></span>
+              </div>
+              <div id="clock-date" class="clock-date">Cargando fecha...</div>
+              
+              <div class="status-card-inner">
+                <p>Tu estado actual:</p>
+                <div class="status-badge-container">
+                  <span class="status-dot pulse"></span>
+                  <span id="current-status-text" class="status-text">Fuera de Jornada</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botones de Marcación Inteligentes -->
+            <div class="attendance-actions">
+              <button id="btn-action-ingreso" class="btn-attendance btn-action-ingreso" data-action="Ingreso">
+                <div class="action-circle">
+                  <span class="material-symbols-rounded">play_arrow</span>
+                </div>
+                <div class="action-details">
+                  <h3>Ingreso</h3>
+                  <p>Marcar inicio de jornada</p>
+                </div>
+              </button>
+
+              <div class="break-actions-row">
+                <button id="btn-action-break-in" class="btn-attendance btn-action-break" data-action="Inicio Refrigerio">
+                  <span class="material-symbols-rounded">restaurant</span>
+                  <span>Inicio Refrigerio</span>
+                </button>
+                <button id="btn-action-break-out" class="btn-attendance btn-action-break" data-action="Fin Refrigerio">
+                  <span class="material-symbols-rounded">restaurant_menu</span>
+                  <span>Fin Refrigerio</span>
+                </button>
+              </div>
+
+              <button id="btn-action-salida" class="btn-attendance btn-action-salida" data-action="Salida">
+                <div class="action-circle">
+                  <span class="material-symbols-rounded">stop</span>
+                </div>
+                <div class="action-details">
+                  <h3>Salida</h3>
+                  <p>Marcar fin de jornada</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Historial Personal Reciente -->
+          <div class="dashboard-col">
+            <div class="card-inner">
+              <div class="inner-header">
+                <h3>Mis Marcas Recientes (Hoy)</h3>
+                <span class="material-symbols-rounded text-gradient">history</span>
+              </div>
+              <div class="log-container">
+                <ul id="personal-log-list" class="log-list">
+                  <li class="log-empty">No has registrado marcas el día de hoy.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: ADMIN DASHBOARD (RESUMEN DE CONEXIONES) -->
+      <section id="view-admin" class="card glassmorphism animate-fade-in hidden">
+        <div class="dashboard-user-bar">
+          <div class="user-info">
+            <div class="avatar-glow admin-glow">
+              <span class="material-symbols-rounded">admin_panel_settings</span>
+            </div>
+            <div>
+              <h2>Panel de Monitoreo General</h2>
+              <span class="badge badge-admin">Acceso Administrativo</span>
+            </div>
+          </div>
+          <button id="btn-admin-close" class="btn-outline">
+            <span>Volver a Marcación</span>
+            <span class="material-symbols-rounded">arrow_back</span>
+          </button>
+        </div>
+
+        <!-- Admin Stats Cards -->
+        <div class="admin-stats-grid">
+          <div class="stat-card card-inner">
+            <span class="material-symbols-rounded stat-icon color-blue">group</span>
+            <div>
+              <h3 id="stat-total-staff">6</h3>
+              <p>Personal Configurado</p>
+            </div>
+          </div>
+          <div class="stat-card card-inner">
+            <span class="material-symbols-rounded stat-icon color-green">check_circle</span>
+            <div>
+              <h3 id="stat-active-today">0</h3>
+              <p>Activos Hoy</p>
+            </div>
+          </div>
+          <div class="stat-card card-inner">
+            <span class="material-symbols-rounded stat-icon color-yellow">restaurant</span>
+            <div>
+              <h3 id="stat-in-break">0</h3>
+              <p>En Refrigerio</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid admin-panel-layout">
+          <!-- Columna Izquierda: Monitoreo en Tiempo Real -->
+          <div class="dashboard-col admin-main-col">
+            <div class="card-inner">
+              <div class="inner-header">
+                <h3>Estado del Personal en Tiempo Real</h3>
+                <span class="material-symbols-rounded text-gradient animate-pulse">sensors</span>
+              </div>
+              <div class="table-responsive">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Colaborador</th>
+                      <th>DNI</th>
+                      <th>Estado Actual</th>
+                      <th>Última Marca</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-live-table-body">
+                    <!-- Filas inyectadas por JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Configuración y Conexión de Hoja -->
+          <div class="dashboard-col admin-config-col">
+            <div class="card-inner">
+              <div class="inner-header">
+                <h3>Integración con Google Sheets</h3>
+                <span class="material-symbols-rounded">settings_ethernet</span>
+              </div>
+              <div class="config-form">
+                <div class="input-group">
+                  <label for="input-sheet-url">URL de Google Apps Script Web App</label>
+                  <div class="input-wrapper">
+                    <span class="material-symbols-rounded input-icon">link</span>
+                    <input type="url" id="input-sheet-url" placeholder="https://script.google.com/macros/s/.../exec">
+                  </div>
+                  <p class="helper-text">Pega aquí el enlace de la Aplicación Web generada desde tu Sheet para conectar la base de datos real.</p>
+                </div>
+                <button id="btn-save-config" class="btn-primary w-full">
+                  <span>Guardar Configuración</span>
+                  <span class="material-symbols-rounded">save</span>
+                </button>
+                <div class="test-connection-section">
+                  <button id="btn-test-connection" class="btn-outline w-full" disabled>
+                    <span>Probar Conexión con Sheet</span>
+                    <span class="material-symbols-rounded">sync_alt</span>
+                  </button>
+                  <div id="test-connection-result" class="test-result-msg"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Instrucciones directas de configuración -->
+            <div class="card-inner bg-dark-secondary">
+              <h4>¿Cómo funciona esta Beta con tu Sheet?</h4>
+              <ol class="step-list-mini">
+                <li>El código no afecta tu Formulario original de Google.</li>
+                <li>Haremos una copia segura de tu Sheet de datos.</li>
+                <li>Pegaremos el código de Apps Script provisto en tu copia.</li>
+                <li>Publicaremos la Web App y pegaremos su link arriba.</li>
+                <li>¡Listo! Tu web beta registrará marcas reales en tu propia hoja.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ADMIN PASSWORD MODAL -->
+    <div id="admin-auth-modal" class="modal-overlay hidden">
+      <div class="modal card glassmorphism animate-scale-up">
+        <div class="card-header text-center">
+          <span class="material-symbols-rounded icon-hero text-gradient color-red">admin_panel_settings</span>
+          <h3>Credenciales de Administrador</h3>
+          <p>Ingresa la contraseña para acceder al panel</p>
+        </div>
+        <form id="form-admin-auth" onsubmit="event.preventDefault();">
+          <div class="input-group">
+            <label for="input-admin-password">Contraseña</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">lock</span>
+              <input type="password" id="input-admin-password" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <p id="admin-error-msg" class="helper-text error-text hidden">Contraseña incorrecta</p>
+          </div>
+          <div class="modal-buttons">
+            <button type="button" id="btn-admin-auth-cancel" class="btn-outline">Cancelar</button>
+            <button type="submit" class="btn-primary">Ingresar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- NOTIFICATION HINTS / TOASTS -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <footer class="app-footer">
+      <p>&copy; 2026 AsistenciaPro. Diseñado para optimización laboral.</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

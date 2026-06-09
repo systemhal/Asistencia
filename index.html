@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Asistencia</title>
+  <!-- Google Fonts & Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Background decorative glowing circles -->
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  
+  <div class="app-container">
+    
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="brand">
+        <img src="icono.jpeg" alt="Logo de la empresa" class="img-logo">
+        <div>
+          <h1>AsistenciaPro</h1>
+          <p>Portal de Registro de Jornada</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <!-- Toggle Claro / Oscuro -->
+        <button id="btn-theme-toggle" class="btn-theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
+          <span class="material-symbols-rounded" id="theme-icon">light_mode</span>
+        </button>
+        <button id="btn-admin-toggle" class="btn-icon-text">
+          <span class="material-symbols-rounded">admin_panel_settings</span>
+          <span>Admin</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      
+      <!-- VIEW 1: LOGIN (PANTALLA DE ACCESO) -->
+      <section id="view-login" class="card active glassmorphism animate-fade-in">
+        <div class="card-header text-center">
+          <span class="material-symbols-rounded icon-hero text-gradient">lock_open</span>
+          <h2>Acceso de Personal</h2>
+         <!--  <p>Ingresa tus datos para marcar asistencia</p>-->
+        </div>
+
+        <form id="form-login" onsubmit="event.preventDefault();">
+          <div class="input-group">
+            <label for="input-dni">Número de DNI</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">badge</span>
+              <input type="text" id="input-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 73507283" autocomplete="username" required maxlength="8">
+            </div>
+            <p id="dni-error-msg" class="helper-text error-text hidden">DNI no registrado en el sistema</p>
+          </div>
+
+          <div class="input-group">
+            <label for="input-pin">Código PIN de Seguridad</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">pin</span>
+              <input type="password" id="input-pin" inputmode="numeric" placeholder="••••" autocomplete="current-password" readonly required>
+            </div>
+            <p class="helper-text">* Para la beta, usa el PIN por defecto: 1234</p>
+          </div>
+
+          <!-- Teclado Virtual Numérico (Especial para móviles/tablets) -->
+          <div class="pinpad">
+            <button type="button" class="btn-pinpad" data-val="1">1</button>
+            <button type="button" class="btn-pinpad" data-val="2">2</button>
+            <button type="button" class="btn-pinpad" data-val="3">3</button>
+            <button type="button" class="btn-pinpad" data-val="4">4</button>
+            <button type="button" class="btn-pinpad" data-val="5">5</button>
+            <button type="button" class="btn-pinpad" data-val="6">6</button>
+            <button type="button" class="btn-pinpad" data-val="7">7</button>
+            <button type="button" class="btn-pinpad" data-val="8">8</button>
+            <button type="button" class="btn-pinpad" data-val="9">9</button>
+            <button type="button" class="btn-pinpad btn-pinpad-clear" data-val="clear">C</button>
+            <button type="button" class="btn-pinpad" data-val="0">0</button>
+            <button type="button" class="btn-pinpad btn-pinpad-back" data-val="back">
+              <span class="material-symbols-rounded">backspace</span>
+            </button>
+          </div>
+
+          <button type="submit" id="btn-submit-login" class="btn-primary">
+            <span>Iniciar Sesión</span>
+            <span class="material-symbols-rounded">login</span>
+          </button>
+        </form>
+      </section>
+
+      <!-- VIEW 2: EMPLOYEE DASHBOARD (TABLERO DE REGISTROS) -->
+      <section id="view-dashboard" class="card glassmorphism animate-fade-in hidden">
+        <div class="dashboard-user-bar">
+          <div class="user-info">
+            <div class="avatar-glow">
+              <span class="material-symbols-rounded">person</span>
+            </div>
+            <div>
+              <h2 id="employee-name">Cargando Nombre...</h2>
+              <span id="employee-badge-role" class="badge badge-role">DNI: <span id="employee-dni-display"></span></span>
+            </div>
+          </div>
+          
+          <button id="btn-logout" class="btn-outline">
+            <span>Cerrar Sesión</span>
+            <span class="material-symbols-rounded">logout</span>
+          </button>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- Columna Izquierda: Reloj y Estado Actual -->
+          <div class="dashboard-col">
+            <div class="clock-card card-inner text-center">
+              <div class="clock-display">
+                <span id="clock-time">00:00:00</span>
+                <span id="clock-ampm"></span>
+              </div>
+              <div id="clock-date" class="clock-date">Cargando fecha...</div>
+              
+              <div class="status-card-inner">
+                <p>Tu estado actual:</p>
+                <div class="status-badge-container">
+                  <span class="status-dot pulse"></span>
+                  <span id="current-status-text" class="status-text">Fuera de Jornada</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botones de Marcación Inteligentes -->
+            <div class="attendance-actions">
+              <button id="btn-action-ingreso" class="btn-attendance btn-action-ingreso" data-action="Ingreso">
+                <div class="action-circle">
+                  <span class="material-symbols-rounded">play_arrow</span>
+                </div>
+                <div class="action-details">
+                  <h3>Ingreso</h3>
+                  <p>Marcar inicio de jornada</p>
+                </div>
+              </button>
+
+              <div class="break-actions-row">
+                <button id="btn-action-break-in" class="btn-attendance btn-action-break" data-action="Inicio Refrigerio">
+                  <span class="material-symbols-rounded">restaurant</span>
+                  <span>Inicio Refrigerio</span>
+                </button>
+                <button id="btn-action-break-out" class="btn-attendance btn-action-break" data-action="Fin Refrigerio">
+                  <span class="material-symbols-rounded">restaurant_menu</span>
+                  <span>Fin Refrigerio</span>
+                </button>
+              </div>
+
+              <button id="btn-action-salida" class="btn-attendance btn-action-salida" data-action="Salida">
+                <div class="action-circle">
+                  <span class="material-symbols-rounded">stop</span>
+                </div>
+                <div class="action-details">
+                  <h3>Salida</h3>
+                  <p>Marcar fin de jornada</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Historial Personal Reciente -->
+          <div class="dashboard-col">
+            <div class="card-inner">
+              <div class="inner-header">
+                <h3>Mis Marcas Recientes (Hoy)</h3>
+                <span class="material-symbols-rounded text-gradient">history</span>
+              </div>
+              <div class="log-container">
+                <ul id="personal-log-list" class="log-list">
+                  <li class="log-empty">No has registrado marcas el día de hoy.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: ADMIN DASHBOARD (RESUMEN DE CONEXIONES) -->
+      <section id="view-admin" class="card glassmorphism animate-fade-in hidden">
+        <div class="dashboard-user-bar">
+          <div class="user-info">
+            <div class="avatar-glow admin-glow">
+              <span class="material-symbols-rounded">admin_panel_settings</span>
+            </div>
+            <div>
+              <h2>Panel de Monitoreo General</h2>
+              <span class="badge badge-admin">Acceso Administrativo</span>
+            </div>
+          </div>
+          <button id="btn-admin-close" class="btn-outline">
+            <span>Volver a Marcación</span>
+            <span class="material-symbols-rounded">arrow_back</span>
+          </button>
+        </div>
+
+        <!-- Pestañas del Administrador -->
+        <div class="admin-tabs-nav">
+          <button class="btn-admin-tab active" data-tab="live">
+            <span class="material-symbols-rounded">sensors</span>
+            <span>Monitoreo en Vivo</span>
+          </button>
+          <button class="btn-admin-tab" data-tab="reports">
+            <span class="material-symbols-rounded">analytics</span>
+            <span>Reportes por Agente</span>
+          </button>
+          <button class="btn-admin-tab" data-tab="consolidated">
+            <span class="material-symbols-rounded">table_chart</span>
+            <span>Resumen General</span>
+          </button>
+        </div>
+
+        <!-- CONTENIDO PESTAÑA 1: MONITOREO EN VIVO -->
+        <div id="tab-live-content" class="admin-tab-content active">
+          <!-- Admin Stats Cards -->
+          <div class="admin-stats-grid">
+          <div class="stat-card card-inner">
+            <span class="material-symbols-rounded stat-icon color-blue">group</span>
+            <div>
+              <h3 id="stat-total-staff">6</h3>
+              <p>Personal Configurado</p>
+            </div>
+          </div>
+          <div class="stat-card card-inner">
+            <span class="material-symbols-rounded stat-icon color-green">check_circle</span>
+            <div>
+              <h3 id="stat-active-today">0</h3>
+              <p>Activos Hoy</p>
+            </div>
+          </div>
+          <div class="stat-card card-inner">
+            <span class="material-symbols-rounded stat-icon color-yellow">restaurant</span>
+            <div>
+              <h3 id="stat-in-break">0</h3>
+              <p>En Refrigerio</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid admin-panel-layout">
+          <!-- Columna Izquierda: Monitoreo en Tiempo Real -->
+          <div class="dashboard-col admin-main-col">
+            <div class="card-inner">
+              <div class="inner-header">
+                <h3>Estado del Personal en Tiempo Real</h3>
+                <span class="material-symbols-rounded text-gradient animate-pulse">sensors</span>
+              </div>
+              <div class="table-responsive">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Colaborador</th>
+                      <th>DNI</th>
+                      <th>Estado Actual</th>
+                      <th>Última Marca</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-live-table-body">
+                    <!-- Filas inyectadas por JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Configuración y Conexión de Hoja -->
+          <div class="dashboard-col admin-config-col">
+            
+            <div class="card-inner" style="margin-bottom: 22px;">
+              <div class="inner-header">
+                <h3>Registrar Nuevo Colaborador</h3>
+                <span class="material-symbols-rounded text-gradient">person_add</span>
+              </div>
+              <form id="form-register-employee" onsubmit="event.preventDefault(); return false;">
+                
+                <div class="input-group">
+                  <label for="reg-dni">Número de DNI</label>
+                  <div class="input-wrapper">
+                    <span class="material-symbols-rounded input-icon">badge</span>
+                    <input type="text" id="reg-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 74839201" required maxlength="8">
+                  </div>
+                </div>
+
+                <div class="input-group">
+                  <label for="reg-name">Nombres y Apellidos Completos</label>
+                  <div class="input-wrapper">
+                    <span class="material-symbols-rounded input-icon">person</span>
+                    <input type="text" id="reg-name" placeholder="Ej. PEREZ GOMEZ JUAN CARLOS" required>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px;">
+                  <div class="input-group">
+                    <label for="reg-age">Edad</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">cake</span>
+                      <input type="number" id="reg-age" placeholder="Ej. 28" required min="18" max="99">
+                    </div>
+                  </div>
+
+                  <div class="input-group">
+                    <label for="reg-gender">Sexo</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">wc</span>
+                      <select id="reg-gender" required style="width: 100%; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px 12px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 1rem; -webkit-appearance: none; outline:none;">
+                        <option value="" disabled selected hidden>Elegir</option>
+                        <option value="Masculino">Masculino</option>
+                        <option value="Femenino">Femenino</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="input-group">
+                  <label for="reg-role">Cargo / Puesto</label>
+                  <div class="input-wrapper">
+                    <span class="material-symbols-rounded input-icon">work</span>
+                    <input type="text" id="reg-role" placeholder="Ej. Operaciones" required>
+                  </div>
+                </div>
+
+                <!-- Nuevos Campos: Horario de Jornada -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
+                  <div class="input-group" style="margin-bottom: 0;">
+                    <label for="reg-work-start">Entrada de Jornada</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">login</span>
+                      <input type="time" id="reg-work-start" value="08:00" required>
+                    </div>
+                  </div>
+                  <div class="input-group" style="margin-bottom: 0;">
+                    <label for="reg-work-end">Salida de Jornada</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">logout</span>
+                      <input type="time" id="reg-work-end" value="17:00" required>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Nuevos Campos: Horario de Break -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 15px;">
+                  <div class="input-group" style="margin-bottom: 0;">
+                    <label for="reg-break-start">Inicio de Break</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">restaurant</span>
+                      <input type="time" id="reg-break-start" value="13:00" required>
+                    </div>
+                  </div>
+                  <div class="input-group" style="margin-bottom: 0;">
+                    <label for="reg-break-end">Fin de Break</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">restaurant_menu</span>
+                      <input type="time" id="reg-break-end" value="14:00" required>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" class="btn-primary w-full">
+                  <span>Registrar en Sistema</span>
+                  <span class="material-symbols-rounded">person_add</span>
+                </button>
+              </form>
+            </div>
+
+            <div class="card-inner">
+              <div class="inner-header">
+                <h3>Integración con Google Sheets</h3>
+                <span class="material-symbols-rounded">settings_ethernet</span>
+              </div>
+              <div class="config-form">
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-bottom: 15px;">
+                  <div class="input-group" style="margin-bottom: 0;">
+                    <label for="input-sheet-url">URL de Google Apps Script Web App</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">link</span>
+                      <input type="url" id="input-sheet-url" placeholder="https://script.google.com/macros/s/.../exec">
+                    </div>
+                  </div>
+                  <div class="input-group" style="margin-bottom: 0;">
+                    <label for="input-tardiness-tolerance">Tolerancia Tardanza (min)</label>
+                    <div class="input-wrapper">
+                      <span class="material-symbols-rounded input-icon">schedule</span>
+                      <input type="number" id="input-tardiness-tolerance" value="5" min="0" max="60" required>
+                    </div>
+                  </div>
+                </div>
+                <button id="btn-save-config" class="btn-primary w-full">
+                  <span>Guardar Configuración</span>
+                  <span class="material-symbols-rounded">save</span>
+                </button>
+                <div class="test-connection-section">
+                  <button id="btn-test-connection" class="btn-outline w-full" disabled>
+                    <span>Probar Conexión con Sheet</span>
+                    <span class="material-symbols-rounded">sync_alt</span>
+                  </button>
+                  <div id="test-connection-result" class="test-result-msg"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Instrucciones directas de configuración -->
+          <!--  <div class="card-inner bg-dark-secondary">
+              <h4>¿Cómo funciona esta Beta con tu Sheet?</h4>
+              <ol class="step-list-mini">
+                <li>El código no afecta tu Formulario original de Google.</li>
+                <li>Haremos una copia segura de tu Sheet de datos.</li>
+                <li>Pegaremos el código de Apps Script provisto en tu copia.</li>
+                <li>Publicaremos la Web App y pegaremos su link arriba.</li>
+                <li>¡Listo! Tu web beta registrará marcas reales en tu propia hoja.</li>
+              </ol>
+            </div> -->
+          </div>
+        </div>
+        </div> <!-- Fin de #tab-live-content -->
+
+        <!-- CONTENIDO PESTAÑA 2: REPORTES POR AGENTE -->
+        <div id="tab-reports-content" class="admin-tab-content hidden">
+          <div class="card-inner report-container">
+            <!-- Encabezado de Impresión Formal (Solo visible en PDF/Impresión) -->
+            <div class="print-header print-only" style="text-align: center; margin-bottom: 25px; border-bottom: 2px solid #1e293b; padding-bottom: 15px;">
+              <h1 style="font-family: var(--font-display); font-size: 1.7rem; font-weight: 700; color: #1e293b; text-transform: uppercase; margin: 0 0 8px 0; letter-spacing: 0.5px;">Reporte de Asistencia Individual</h1>
+              <p style="font-size: 0.95rem; color: #475569; margin: 0; font-weight: 500;">
+                Colaborador: <span id="print-emp-name" style="font-weight: 700; color: #0f172a;"></span> &nbsp;|&nbsp; 
+                DNI: <span id="print-emp-dni" style="font-weight: 700; color: #0f172a;"></span> &nbsp;|&nbsp; 
+                Cargo: <span id="print-emp-role" style="font-weight: 700; color: #0f172a;"></span>
+              </p>
+            </div>
+
+            <div class="inner-header no-print" style="margin-bottom: 15px;">
+              <div class="report-title-section" style="display: flex; align-items: center; gap: 10px;">
+                <h3>Historial y Reporte por Colaborador</h3>
+                <span class="material-symbols-rounded text-gradient">analytics</span>
+              </div>
+            </div>
+
+            <!-- Filtros de fecha y colaborador -->
+            <div class="report-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+              <div class="input-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                <label for="select-report-employee" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Colaborador</label>
+                <div class="input-wrapper select-wrapper" style="position: relative;">
+                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">person</span>
+                  <select id="select-report-employee" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; cursor: pointer; -webkit-appearance: none;">
+                    <option value="" disabled selected hidden>Seleccionar colaborador...</option>
+                  </select>
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom: 0; width: 165px;">
+                <label for="report-start-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Desde</label>
+                <div class="input-wrapper" style="position: relative;">
+                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
+                  <input type="date" id="report-start-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom: 0; width: 165px;">
+                <label for="report-end-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Hasta</label>
+                <div class="input-wrapper" style="position: relative;">
+                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
+                  <input type="date" id="report-end-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
+                </div>
+              </div>
+              <button id="btn-filter-report" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">filter_list</span>
+                <span>Filtrar</span>
+              </button>
+              <button id="btn-export-agent-csv" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">download</span>
+                <span>Exportar CSV</span>
+              </button>
+              <button id="btn-export-agent-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">print</span>
+                <span>Imprimir / PDF</span>
+              </button>
+            </div>
+
+            <!-- Contenedor del Reporte -->
+            <div class="report-results-wrapper">
+              <!-- Nombre del Colaborador (Para visualización y PDF) -->
+              <div id="report-employee-title" class="report-employee-title hidden no-print" style="margin-bottom: 20px; font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                <span class="material-symbols-rounded text-gradient" style="font-size: 28px;">person</span>
+                <span id="report-employee-name-display"></span>
+              </div>
+
+              <!-- Resumen de Horario Asignado del Agente -->
+              <div class="report-agent-schedule-summary" id="report-schedule-summary" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; padding: 15px; background: var(--surface-1); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+                <!-- Inyectado por JS: Entrada, Salida, Break y Horas Esperadas -->
+                <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted);">
+                  Selecciona un colaborador para ver sus horarios asignados y jornada teórica.
+                </div>
+              </div>
+              
+              <div class="table-responsive">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th class="text-center">Entrada</th>
+                      <th class="text-center">Refrigerio (Inicio → Fin)</th>
+                      <th class="text-center">Salida</th>
+                      <th class="text-center">Refrigerio (Total)</th>
+                      <th class="text-center">Trabajo Real</th>
+                      <th class="text-center">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-report-table-body">
+                    <tr>
+                      <td colspan="7" class="text-center text-muted" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                        Selecciona un colaborador en la parte superior para cargar su historial diario.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div> <!-- Fin de #tab-reports-content -->
+
+        <!-- CONTENIDO PESTAÑA 3: RESUMEN GENERAL CONSOLIDADO -->
+        <div id="tab-consolidated-content" class="admin-tab-content hidden">
+          <div class="card-inner report-container">
+            <div class="inner-header" style="margin-bottom: 15px;">
+              <div class="report-title-section" style="display: flex; align-items: center; gap: 10px;">
+                <h3>Resumen Consolidado de Horas Trabajadas</h3>
+                <span class="material-symbols-rounded text-gradient">table_chart</span>
+              </div>
+            </div>
+
+            <!-- Filtros de fecha consolidado -->
+            <div class="consolidated-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+              <div class="input-group" style="margin-bottom: 0; width: 165px;">
+                <label for="consolidated-start-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Desde</label>
+                <div class="input-wrapper" style="position: relative;">
+                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
+                  <input type="date" id="consolidated-start-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom: 0; width: 165px;">
+                <label for="consolidated-end-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Hasta</label>
+                <div class="input-wrapper" style="position: relative;">
+                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
+                  <input type="date" id="consolidated-end-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
+                </div>
+              </div>
+              <button id="btn-filter-consolidated" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">filter_list</span>
+                <span>Filtrar</span>
+              </button>
+              <button id="btn-export-consolidated-csv" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">download</span>
+                <span>Exportar CSV</span>
+              </button>
+              <button id="btn-refresh-consolidated" class="btn-outline" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; height: 42px; border-radius: var(--radius-md); margin-left: auto;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">sync</span>
+                <span>Actualizar Datos</span>
+              </button>
+            </div>
+
+            <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5;">
+              Esta tabla muestra las horas netas trabajadas por cada agente en cada día registrado. El tiempo de refrigerio (break) se deduce automáticamente de la jornada.
+            </p>
+
+            <div class="table-responsive">
+              <table class="admin-table">
+                <thead id="admin-consolidated-thead">
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>DNI</th>
+                    <th class="text-center" style="width: 150px;">Cargando Fechas...</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-consolidated-table-body">
+                  <tr>
+                    <td colspan="3" class="text-center text-muted" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                      Cargando resumen de asistencia desde Google Sheets...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div> <!-- Fin de #tab-consolidated-content -->
+      </section>
+
+    </main>
+
+    <!-- ADMIN PASSWORD MODAL -->
+    <div id="admin-auth-modal" class="modal-overlay hidden">
+      <div class="modal card glassmorphism animate-scale-up">
+        <div class="card-header text-center">
+          <span class="material-symbols-rounded icon-hero text-gradient color-red">admin_panel_settings</span>
+          <h3>Credenciales de Administrador</h3>
+          <p>Ingresa la contraseña para acceder al panel</p>
+        </div>
+        <form id="form-admin-auth" onsubmit="event.preventDefault();">
+          <div class="input-group">
+            <label for="input-admin-password">Contraseña</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">lock</span>
+              <input type="password" id="input-admin-password" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <p id="admin-error-msg" class="helper-text error-text hidden">Contraseña incorrecta</p>
+          </div>
+          <div class="modal-buttons">
+            <button type="button" id="btn-admin-auth-cancel" class="btn-outline">Cancelar</button>
+            <button type="submit" class="btn-primary">Ingresar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- EDIT EMPLOYEE MODAL -->
+    <div id="modal-edit-employee" class="modal-overlay hidden">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 500px; width: 90%;">
+        <div class="card-header text-center">
+          <span class="material-symbols-rounded icon-hero text-gradient color-blue">edit_note</span>
+          <h3>Editar Colaborador</h3>
+          <p>Modifica los datos y horarios de jornada</p>
+        </div>
+        <form id="form-edit-employee" onsubmit="event.preventDefault();">
+          <input type="hidden" id="edit-dni-hidden">
+          
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label>Número de DNI (No editable)</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">badge</span>
+              <input type="text" id="edit-dni-display-input" readonly style="opacity: 0.6; cursor: not-allowed;">
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="edit-name">Nombres y Apellidos Completos</label>
+            <div class="input-wrapper">
+              <span class="material-symbols-rounded input-icon">person</span>
+              <input type="text" id="edit-name" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="edit-role">Cargo / Puesto</label>
+              <div class="input-wrapper">
+                <span class="material-symbols-rounded input-icon">work</span>
+                <input type="text" id="edit-role" required>
+              </div>
+            </div>
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="edit-pin">Código PIN</label>
+              <div class="input-wrapper">
+                <span class="material-symbols-rounded input-icon">pin</span>
+                <input type="text" id="edit-pin" pattern="[0-9]{4}" title="Debe ser de 4 dígitos" placeholder="1234" required maxlength="4">
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="edit-work-start">Entrada de Jornada</label>
+              <div class="input-wrapper">
+                <span class="material-symbols-rounded input-icon">login</span>
+                <input type="time" id="edit-work-start" required>
+              </div>
+            </div>
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="edit-work-end">Salida de Jornada</label>
+              <div class="input-wrapper">
+                <span class="material-symbols-rounded input-icon">logout</span>
+                <input type="time" id="edit-work-end" required>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 20px;">
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="edit-break-start">Inicio de Break</label>
+              <div class="input-wrapper">
+                <span class="material-symbols-rounded input-icon">restaurant</span>
+                <input type="time" id="edit-break-start" required>
+              </div>
+            </div>
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="edit-break-end">Fin de Break</label>
+              <div class="input-wrapper">
+                <span class="material-symbols-rounded input-icon">restaurant_menu</span>
+                <input type="time" id="edit-break-end" required>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-buttons">
+            <button type="button" id="btn-edit-cancel" class="btn-outline">Cancelar</button>
+            <button type="submit" class="btn-primary">Guardar Cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- NOTIFICATION HINTS / TOASTS -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <footer class="app-footer">
+      <p>&copy; 2026 AsistenciaPro. Diseñado para optimización laboral.</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
