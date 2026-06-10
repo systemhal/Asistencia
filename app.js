@@ -482,7 +482,8 @@ function renderPersonalLogs() {
   personalLogList.innerHTML = '';
   const allHistory = attendanceState[currentSession.dni].history || [];
   const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
-  const history = allHistory.filter(item => item.dateStr === todayStr);
+  const normToday = normalizeDateStr(todayStr);
+  const history = allHistory.filter(item => normalizeDateStr(item.dateStr) === normToday);
   
   if (history.length === 0) {
     personalLogList.innerHTML = '<li class="log-empty">No has registrado marcas el día de hoy.</li>';
@@ -1791,8 +1792,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     };
   }
 
+  const isToday = normalizeDateStr(dateStr) === normalizeDateStr(new Date().toLocaleDateString('es-ES'));
   const entradaReal = ingresoMark.timeStr;
-  const salidaReal = salidaMark ? salidaMark.timeStr : (dateStr === new Date().toLocaleDateString('es-ES') ? 'En curso' : 'Sin salida');
+  const salidaReal = salidaMark ? salidaMark.timeStr : (isToday ? 'En curso' : 'Sin salida');
   
   let breakReal = '---';
   let breakSeconds = 0;
@@ -1801,7 +1803,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
       breakReal = `${breakInMark.timeStr} → ${breakOutMark.timeStr}`;
       breakSeconds = Math.max(0, Math.floor((breakOutMark.timestamp - breakInMark.timestamp) / 1000));
     } else {
-      if (dateStr === new Date().toLocaleDateString('es-ES')) {
+      if (isToday) {
         breakReal = `${breakInMark.timeStr} → En curso`;
         breakSeconds = Math.max(0, Math.floor((Date.now() - breakInMark.timestamp) / 1000));
       } else {
@@ -1814,7 +1816,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   let totalElapsedSeconds = 0;
   if (salidaMark) {
     totalElapsedSeconds = Math.floor((salidaMark.timestamp - ingresoMark.timestamp) / 1000);
-  } else if (dateStr === new Date().toLocaleDateString('es-ES')) {
+  } else if (isToday) {
     totalElapsedSeconds = Math.floor((Date.now() - ingresoMark.timestamp) / 1000);
   } else {
     const lastMark = historyForDate[historyForDate.length - 1];
@@ -1906,8 +1908,142 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   };
 }
 
+// Función reutilizable para actualizar el resumen de horario según una fecha de referencia
+function updateScheduleSummary(employee, referenceDate, dateLabel) {
+  const summaryDiv = document.getElementById('report-schedule-summary');
+  if (!summaryDiv || !employee) return;
+
+  let schedObj = employee.weeklySchedule;
+  if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+    try { schedObj = JSON.parse(schedObj); } catch(e) { schedObj = null; }
+  }
+  if (!schedObj) schedObj = {};
+
+  const refDow = referenceDate.getDay();
+  const todayDow = new Date().getDay();
+  const dayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const dayNamesFull = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+  // Determinar si la fecha de referencia es hoy
+  const todayObj = new Date();
+  todayObj.setHours(0,0,0,0);
+  const refObj = new Date(referenceDate);
+  refObj.setHours(0,0,0,0);
+  const isRefToday = refObj.getTime() === todayObj.getTime();
+
+  // Etiqueta para los encabezados
+  const headerSuffix = isRefToday ? 'Hoy' : (dateLabel || dayNamesFull[refDow]);
+
+  // Helper para obtener horario de un día
+  function getSchedForDay(dow) {
+    let ds = schedObj[dow] || null;
+    if (!ds) {
+      if (dow === 0) ds = { isRestDay: true, workStart: "---", workEnd: "---", expectedHours: 0 };
+      else if (dow === 6) ds = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: employee.workEnd || "13:00", expectedHours: 4 };
+      else ds = { isRestDay: false, workStart: employee.workStart || "08:00", workEnd: employee.workEnd || "17:00", expectedHours: 8 };
+    }
+    return ds;
+  }
+
+  // Construir tabla resumen de distribución semanal
+  let scheduleRows = '';
+  for (let d = 1; d <= 6; d++) { // Lun(1) a Sáb(6)
+    const ds = getSchedForDay(d);
+    const isRef = refDow === d;
+    const isToday = todayDow === d;
+    const highlight = isRef ? 'background: rgba(99, 102, 241, 0.08); border-radius: 6px; font-weight: 600;' : '';
+    
+    let badge = '';
+    if (isRef && isRefToday) {
+      badge = '<span style="font-size: 0.6rem; background: var(--gradient-1); color: white; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">HOY</span>';
+    } else if (isRef) {
+      badge = '<span style="font-size: 0.6rem; background: #6366f1; color: white; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">FILTRO</span>';
+    } else if (isToday) {
+      badge = '<span style="font-size: 0.6rem; background: rgba(99,102,241,0.2); color: #6366f1; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">HOY</span>';
+    }
+
+    if (ds.isRestDay) {
+      scheduleRows += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; ${highlight}">
+        <span style="font-size: 0.8rem; color: var(--text-secondary);">${dayLabels[d]}${badge}</span>
+        <span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Descanso</span>
+      </div>`;
+    } else {
+      scheduleRows += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; ${highlight}">
+        <span style="font-size: 0.8rem; color: var(--text-secondary);">${dayLabels[d]}${badge}</span>
+        <span style="font-size: 0.8rem; color: var(--text-primary);">${ds.workStart || "08:00"} → ${ds.workEnd || "17:00"} (${ds.expectedHours || 8}h)</span>
+      </div>`;
+    }
+  }
+  // Domingo
+  const domDs = getSchedForDay(0);
+  const isDomRef = refDow === 0;
+  const isDomToday = todayDow === 0;
+  const domHighlight = isDomRef ? 'background: rgba(99, 102, 241, 0.08); border-radius: 6px; font-weight: 600;' : '';
+  let domBadge = '';
+  if (isDomRef && isRefToday) {
+    domBadge = '<span style="font-size: 0.6rem; background: var(--gradient-1); color: white; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">HOY</span>';
+  } else if (isDomRef) {
+    domBadge = '<span style="font-size: 0.6rem; background: #6366f1; color: white; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">FILTRO</span>';
+  } else if (isDomToday) {
+    domBadge = '<span style="font-size: 0.6rem; background: rgba(99,102,241,0.2); color: #6366f1; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">HOY</span>';
+  }
+  if (domDs.isRestDay) {
+    scheduleRows += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; ${domHighlight}">
+      <span style="font-size: 0.8rem; color: var(--text-secondary);">Dom${domBadge}</span>
+      <span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Descanso</span>
+    </div>`;
+  } else {
+    scheduleRows += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; ${domHighlight}">
+      <span style="font-size: 0.8rem; color: var(--text-secondary);">Dom${domBadge}</span>
+      <span style="font-size: 0.8rem; color: var(--text-primary);">${domDs.workStart || "08:00"} → ${domDs.workEnd || "17:00"} (${domDs.expectedHours || 8}h)</span>
+    </div>`;
+  }
+
+  // Obtener horario de la fecha de referencia para resumen principal
+  const refSched = getSchedForDay(refDow);
+  const refEntrada = refSched.isRestDay ? 'Descanso' : (refSched.workStart || "08:00");
+  const refSalida = refSched.isRestDay ? 'Descanso' : (refSched.workEnd || "17:00");
+  // Calcular jornada total (entrada a salida) en HH:MM
+  let jornadaDisplay = 'Descanso';
+  if (!refSched.isRestDay) {
+    const startMin = timeStrToMinutes(refSched.workStart || "08:00");
+    const endMin = timeStrToMinutes(refSched.workEnd || "17:00");
+    const totalMin = Math.max(0, endMin - startMin);
+    const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const mm = String(totalMin % 60).padStart(2, '0');
+    jornadaDisplay = `${hh}:${mm}`;
+  }
+
+
+  // Formatear la fecha de referencia para mostrar
+  const refDateStr = referenceDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const dateInfo = isRefToday ? '' : `<span style="font-size: 0.65rem; color: var(--text-muted); display: block; margin-top: 2px;">${refDateStr} (${dayNamesFull[refDow]})</span>`;
+
+  summaryDiv.innerHTML = `
+    <div class="report-schedule-item">
+      <h4>Entrada ${headerSuffix}</h4>
+      <p>${refEntrada}</p>
+      ${dateInfo}
+    </div>
+    <div class="report-schedule-item">
+      <h4>Salida ${headerSuffix}</h4>
+      <p>${refSalida}</p>
+      ${dateInfo ? '' : ''}
+    </div>
+    <div class="report-schedule-item">
+      <h4>Refrigerio</h4>
+      <p>${refSched.isRestDay || refSched.nobreak ? 'N/A' : ((employee.breakStart || "13:00") + ' a ' + (employee.breakEnd || "14:00"))}</p>
+    </div>
+    <div class="report-schedule-item">
+      <h4>Jornada ${headerSuffix}</h4>
+      <p>${jornadaDisplay}</p>
+    </div>
+  `;
+}
+
 // Poblar dropdown de selección para el reporte
 function updateReportEmployeeSelect() {
+
   const select = document.getElementById('select-report-employee');
   const justSelect = document.getElementById('just-employee');
   
@@ -1972,32 +2108,9 @@ function renderAgentReport(dni) {
     printRole.textContent = employee.role;
   }
 
-  // Detalles planificados
-  const expectedStart = timeStrToMinutes(employee.workStart || "08:00");
-  const expectedEnd = timeStrToMinutes(employee.workEnd || "17:00");
-  const expectedBreakStart = timeStrToMinutes(employee.breakStart || "13:00");
-  const expectedBreakEnd = timeStrToMinutes(employee.breakEnd || "14:00");
-  const expectedBreak = Math.max(0, expectedBreakEnd - expectedBreakStart);
-  const expectedWork = Math.max(0, (expectedEnd - expectedStart) - expectedBreak);
+  // Mostrar resumen de horario del día actual al cargar
+  updateScheduleSummary(employee, new Date());
 
-  summaryDiv.innerHTML = `
-    <div class="report-schedule-item">
-      <h4>Entrada Planificada</h4>
-      <p>${employee.workStart || "08:00"}</p>
-    </div>
-    <div class="report-schedule-item">
-      <h4>Salida Planificada</h4>
-      <p>${employee.workEnd || "17:00"}</p>
-    </div>
-    <div class="report-schedule-item">
-      <h4>Refrigerio Planificado</h4>
-      <p>${employee.breakStart || "13:00"} a ${employee.breakEnd || "14:00"} (${formatMinutesToDuration(expectedBreak)})</p>
-    </div>
-    <div class="report-schedule-item">
-      <h4>Jornada Completa</h4>
-      <p>${formatMinutesToDuration(expectedWork)}</p>
-    </div>
-  `;
 
   const state = attendanceState[dni] || { history: [] };
   const localHistory = state.history || [];
@@ -2060,6 +2173,16 @@ function renderReportTable(history, employee) {
   });
 
   if (filteredHistory.length === 0) {
+    // Actualizar resumen al filtrar aunque no haya marcas
+    if (startDate) {
+      const parts = startDate.split('-');
+      if (parts.length === 3) {
+        const refDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        if (!isNaN(refDate.getTime())) {
+          updateScheduleSummary(employee, refDate);
+        }
+      }
+    }
     tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 25px;">No hay marcas registradas para el rango de fechas seleccionado.</td></tr>';
     return;
   }
@@ -2082,8 +2205,30 @@ function renderReportTable(history, employee) {
     return dateB - dateA;
   });
 
+  // Actualizar resumen de horario según la fecha filtrada
+  if (startDate) {
+    const parts = startDate.split('-'); // yyyy-mm-dd
+    if (parts.length === 3) {
+      const refDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      if (!isNaN(refDate.getTime())) {
+        // Si el rango es un solo día, mostrar ese día específico
+        if (startDate === endDate || !endDate) {
+          updateScheduleSummary(employee, refDate);
+        } else {
+          // Si es rango de varios días, mostrar el primer día del filtro
+          updateScheduleSummary(employee, refDate, 'Desde');
+        }
+      }
+    }
+  } else {
+    // Sin filtro, mostrar horario de hoy
+    updateScheduleSummary(employee, new Date());
+  }
+
+
   tbody.innerHTML = '';
   sortedDates.forEach(dateStr => {
+
     const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
     const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
     
@@ -2906,12 +3051,7 @@ function renderMonthlyTable(history) {
   });
 
   const now = new Date();
-  let lastDay = new Date(year, monthIndex + 1, 0).getDate();
-  if (year === now.getFullYear() && monthIndex === now.getMonth()) {
-    lastDay = now.getDate();
-  } else if (year > now.getFullYear() || (year === now.getFullYear() && monthIndex > now.getMonth())) {
-    lastDay = 0;
-  }
+  const totalDaysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
   const FERIADOS = [
     "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", 
@@ -2937,6 +3077,9 @@ function renderMonthlyTable(history) {
     let tardanzasSeconds = 0;
     let excessBreakSeconds = 0;
     let totalWorkedSeconds = 0;
+    let diasFeriados = 0;
+    let diasDescanso = 0;
+    let horasExtraSeconds = 0; // Horas trabajadas en feriados/descanso
 
     let schedObj = employee.weeklySchedule;
     if (typeof schedObj === 'string' && schedObj.trim() !== '') {
@@ -2950,7 +3093,7 @@ function renderMonthlyTable(history) {
       schedObj = {};
     }
 
-    for (let day = 1; day <= lastDay; day++) {
+    for (let day = 1; day <= totalDaysInMonth; day++) {
       const dateStr = `${String(day).padStart(2, '0')}/${String(monthIndex + 1).padStart(2, '0')}/${year}`;
       const dayStr = String(day).padStart(2, '0');
       const monthStrPad = String(monthIndex + 1).padStart(2, '0');
@@ -2970,46 +3113,64 @@ function renderMonthlyTable(history) {
       }
 
       const isWorkday = !isRestDay && !isHoliday;
-      if (isWorkday) {
-        diasLaborables++;
+      const isPastOrToday = (year < now.getFullYear()) || 
+                            (year === now.getFullYear() && monthIndex < now.getMonth()) || 
+                            (year === now.getFullYear() && monthIndex === now.getMonth() && day <= now.getDate());
+
+      if (isPastOrToday) {
+        if (isWorkday) {
+          diasLaborables++;
+        } else if (isHoliday) {
+          diasFeriados++;
+        } else if (isRestDay) {
+          diasDescanso++;
+        }
       }
 
       const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
       const hasIngreso = dayMarks && dayMarks.some(m => m.action === 'Ingreso');
 
       if (hasIngreso) {
-        diasAsistidos++;
-        
         dayMarks.sort((a, b) => a.timestamp - b.timestamp);
         const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
-        
-        if (report.tardiness) {
-          tardanzasCount++;
-          const actualEntrySec = timeStrToSeconds(report.entradaReal);
-          let schedEntry = "08:00";
-          if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
-            schedEntry = schedObj[dayOfWeek].workStart;
-          } else if (dayOfWeek === 6) {
-            schedEntry = employee.workStart || "09:00";
-          } else {
-            schedEntry = employee.workStart || "08:00";
-          }
-          const scheduledEntrySec = timeStrToSeconds(schedEntry);
-          const diff = actualEntrySec - scheduledEntrySec;
-          if (diff > 0) {
-            tardanzasSeconds += diff;
-          }
-        }
 
-        if (report.excessBreakSeconds > 0) {
-          excessBreakSeconds += report.excessBreakSeconds;
+        if (isWorkday) {
+          // Día laboral normal
+          diasAsistidos++;
+          
+          if (report.tardiness) {
+            tardanzasCount++;
+            const actualEntrySec = timeStrToSeconds(report.entradaReal);
+            let schedEntry = "08:00";
+            if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
+              schedEntry = schedObj[dayOfWeek].workStart;
+            } else if (dayOfWeek === 6) {
+              schedEntry = employee.workStart || "09:00";
+            } else {
+              schedEntry = employee.workStart || "08:00";
+            }
+            const scheduledEntrySec = timeStrToSeconds(schedEntry);
+            const diff = actualEntrySec - scheduledEntrySec;
+            if (diff > 0) {
+              tardanzasSeconds += diff;
+            }
+          }
+
+          if (report.excessBreakSeconds > 0) {
+            excessBreakSeconds += report.excessBreakSeconds;
+          }
+        } else {
+          // Trabajó en feriado o día de descanso → horas extra
+          if (report.workedSeconds > 0) {
+            horasExtraSeconds += report.workedSeconds;
+          }
         }
 
         if (report.workedSeconds > 0) {
           totalWorkedSeconds += report.workedSeconds;
         }
       } else {
-        if (isWorkday) {
+        if (isWorkday && isPastOrToday) {
           const justification = justificacionesDatabase.find(j => 
             String(j.dni) === String(dni) && 
             normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
@@ -3039,6 +3200,7 @@ function renderMonthlyTable(history) {
     tbody.appendChild(tr);
   });
 }
+
 
 function exportMonthlyCSV() {
   const monthInput = document.getElementById('monthly-select-month');
@@ -3152,28 +3314,31 @@ function exportMonthlyCSV() {
           const hasIngreso = dayMarks && dayMarks.some(m => m.action === 'Ingreso');
 
           if (hasIngreso) {
-            diasAsistidos++;
-            
             dayMarks.sort((a, b) => a.timestamp - b.timestamp);
             const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
             
-            if (report.tardiness) {
-              tardanzasCount++;
-              const actualEntrySec = timeStrToSeconds(report.entradaReal);
-              let schedEntry = "08:00";
-              if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
-                schedEntry = schedObj[dayOfWeek].workStart;
-              } else if (dayOfWeek === 6) {
-                schedEntry = employee.workStart || "09:00";
-              } else {
-                schedEntry = employee.workStart || "08:00";
+            if (isWorkday) {
+              diasAsistidos++;
+              
+              if (report.tardiness) {
+                tardanzasCount++;
+                const actualEntrySec = timeStrToSeconds(report.entradaReal);
+                let schedEntry = "08:00";
+                if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
+                  schedEntry = schedObj[dayOfWeek].workStart;
+                } else if (dayOfWeek === 6) {
+                  schedEntry = employee.workStart || "09:00";
+                } else {
+                  schedEntry = employee.workStart || "08:00";
+                }
+                const scheduledEntrySec = timeStrToSeconds(schedEntry);
+                const diff = actualEntrySec - scheduledEntrySec;
+                if (diff > 0) tardanzasSeconds += diff;
               }
-              const scheduledEntrySec = timeStrToSeconds(schedEntry);
-              const diff = actualEntrySec - scheduledEntrySec;
-              if (diff > 0) tardanzasSeconds += diff;
-            }
 
-            if (report.excessBreakSeconds > 0) excessBreakSeconds += report.excessBreakSeconds;
+              if (report.excessBreakSeconds > 0) excessBreakSeconds += report.excessBreakSeconds;
+            }
+            
             if (report.workedSeconds > 0) totalWorkedSeconds += report.workedSeconds;
           } else {
             if (isWorkday) {
@@ -3627,7 +3792,7 @@ function renderEmployeeWeeklySummary(dni) {
     
     const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
     const hasIngreso = dayMarks.some(m => m.action === 'Ingreso');
-    const workedHrMin = secondsToHrMinString(report.workedSeconds);
+    const workedHrMin = formatSecondsToHHMMSS(report.workedSeconds);
     
     if (hasIngreso) {
       totalWorkedSec += report.workedSeconds;
@@ -3753,7 +3918,7 @@ function renderEmployeeWeeklySummary(dni) {
   const totalTardinessLabel = document.getElementById('weekly-total-tardiness');
   
   if (totalHoursLabel) {
-    totalHoursLabel.textContent = secondsToHrMinString(totalWorkedSec);
+    totalHoursLabel.textContent = formatSecondsToHHMMSS(totalWorkedSec);
   }
   if (totalTardinessLabel) {
     totalTardinessLabel.textContent = `${totalTardinessMin} min`;
