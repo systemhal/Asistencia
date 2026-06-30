@@ -103,10 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupChangePinModal();
   setupWeeklyScheduleUIListeners();
   setupMonthlyReportUIListeners();
-  syncEmployeesFromGoogleSheets().then(() => {
-    syncJustificacionesFromGoogleSheets();
-    syncFeriadosFromGoogleSheets();
-  });
+  syncInitialData();
 });
 
 /* ==========================================================================
@@ -371,6 +368,24 @@ function setupDashboardView() {
       .then(res => {
         if (res.status === "ok" && Array.isArray(res.data)) {
           attendanceState[currentSession.dni].history = res.data;
+          
+          // Reconstruir el estado actual (action y timestamp) del empleado logueado para hoy
+          const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+          const normToday = normalizeDateStr(todayStr);
+          const todayMarks = res.data.filter(item => normalizeDateStr(item.dateStr) === normToday);
+          
+          if (todayMarks.length > 0) {
+            todayMarks.sort((a, b) => a.timestamp - b.timestamp);
+            const latestMark = todayMarks[todayMarks.length - 1];
+            attendanceState[currentSession.dni].action = latestMark.action;
+            attendanceState[currentSession.dni].timestamp = latestMark.timestamp;
+            updateDashboardStatusUI(latestMark.action);
+          } else {
+            attendanceState[currentSession.dni].action = 'Desconectado';
+            attendanceState[currentSession.dni].timestamp = null;
+            updateDashboardStatusUI('Desconectado');
+          }
+          
           saveState();
           renderPersonalLogs();
           renderEmployeeWeeklySummary(currentSession.dni);
@@ -473,6 +488,44 @@ function updateDashboardStatusUI(action) {
       btnBreakIn.disabled = true;
       btnBreakOut.disabled = true;
       btnSalida.disabled = true;
+      
+      // Bloquear ingreso si ya pasó la hora de fin de jornada programada para hoy
+      if (currentSession && employeesDatabase[currentSession.dni]) {
+        const employee = employeesDatabase[currentSession.dni];
+        const todayDate = new Date();
+        const dayOfWeek = todayDate.getDay(); // 0 = Domingo, 1 = Lunes...
+        let todaySched = null;
+        if (employee && employee.weeklySchedule) {
+          let schedObj = employee.weeklySchedule;
+          if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+            try { schedObj = JSON.parse(schedObj); } catch(e) {}
+          }
+          if (schedObj && schedObj[dayOfWeek]) {
+            todaySched = schedObj[dayOfWeek];
+          }
+        }
+        if (!todaySched) {
+          if (dayOfWeek === 0) todaySched = { isRestDay: true };
+          else todaySched = { isRestDay: false, workEnd: employee.workEnd || "17:00" };
+        }
+        
+        if (todaySched && !todaySched.isRestDay) {
+          const workEndStr = todaySched.workEnd || "17:00";
+          const [endHour, endMin] = workEndStr.split(':').map(Number);
+          const endSeconds = (endHour * 3600) + (endMin * 60);
+          
+          const nowHour = todayDate.getHours();
+          const nowMin = todayDate.getMinutes();
+          const nowSec = todayDate.getSeconds();
+          const nowSeconds = (nowHour * 3600) + (nowMin * 60) + nowSec;
+          
+          if (nowSeconds >= endSeconds) {
+            btnIngreso.disabled = true;
+            btnIngreso.title = "No puede marcar ingreso fuera de su jornada.";
+            currentStatusText.textContent = 'Fuera de Jornada (Horario Finalizado)';
+          }
+        }
+      }
       break;
   }
 }
@@ -702,6 +755,171 @@ function syncEmployeesFromGoogleSheets() {
     });
 }
 
+// Sincronizar todos los estados de asistencia basados en el historial completo de Google Sheets
+function syncAllAttendanceStatesFromHistory() {
+  if (!googleScriptUrl) return Promise.resolve();
+  return fetchAllHistoryFromGoogleSheets()
+    .then(history => {
+      if (!history || !Array.isArray(history)) return;
+      
+      // Inicializar el historial vacío de todos los empleados
+      Object.keys(employeesDatabase).forEach(dni => {
+        if (!attendanceState[dni]) {
+          attendanceState[dni] = { action: 'Desconectado', timestamp: null, history: [] };
+        } else {
+          attendanceState[dni].history = [];
+        }
+      });
+      
+      // Agrupar marcas del historial por DNI
+      history.forEach(item => {
+        const dni = item.dni;
+        if (dni && attendanceState[dni]) {
+          const exists = attendanceState[dni].history.some(h => 
+            h.timestamp === item.timestamp && h.action === item.action
+          );
+          if (!exists) {
+            attendanceState[dni].history.push(item);
+          }
+        }
+      });
+      
+      // Reconstruir el estado (action y timestamp) para hoy
+      const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+      const normToday = normalizeDateStr(todayStr);
+      
+      Object.keys(employeesDatabase).forEach(dni => {
+        const todayMarks = attendanceState[dni].history.filter(item => 
+          normalizeDateStr(item.dateStr) === normToday
+        );
+        
+        if (todayMarks.length > 0) {
+          todayMarks.sort((a, b) => a.timestamp - b.timestamp);
+          const latestMark = todayMarks[todayMarks.length - 1];
+          attendanceState[dni].action = latestMark.action;
+          attendanceState[dni].timestamp = latestMark.timestamp;
+        } else {
+          attendanceState[dni].action = 'Desconectado';
+          attendanceState[dni].timestamp = null;
+        }
+      });
+      
+      saveState();
+      updateAdminView();
+      console.log("Estados de asistencia reconstruidos desde historial de la nube.");
+    })
+    .catch(err => {
+      console.error("Error reconstruyendo estados de asistencia desde el historial:", err);
+    });
+}
+
+// Sincronización consolidada/unificada en una sola petición
+function syncInitialData() {
+  if (!googleScriptUrl) return Promise.resolve();
+  
+  console.log("Iniciando sincronización unificada...");
+  
+  return fetch(`${googleScriptUrl}?action=get_initial_data`)
+    .then(res => res.json())
+    .then(res => {
+      if (res.status === "ok" && res.data) {
+        const { employees, justificaciones, feriados, history } = res.data;
+        
+        // 1. Cargar colaboradores
+        if (Array.isArray(employees)) {
+          employees.forEach(emp => {
+            let parsedWeekly = null;
+            if (emp.weeklySchedule) {
+              try { parsedWeekly = typeof emp.weeklySchedule === 'string' ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule; } catch(e) {}
+            }
+            employeesDatabase[emp.dni] = {
+              dni: emp.dni,
+              name: emp.name,
+              role: emp.role,
+              age: emp.age,
+              gender: emp.gender,
+              pin: emp.pin || "1234",
+              workStart: emp.workStart || "08:00",
+              workEnd: emp.workEnd || "17:00",
+              breakStart: emp.breakStart || "13:00",
+              breakEnd: emp.breakEnd || "14:00",
+              weeklySchedule: parsedWeekly
+            };
+            if (!attendanceState[emp.dni]) {
+              attendanceState[emp.dni] = { action: 'Desconectado', timestamp: null, history: [] };
+            }
+          });
+        }
+        
+        // 2. Cargar justificaciones
+        if (Array.isArray(justificaciones)) {
+          justificacionesDatabase = justificaciones;
+        }
+        
+        // 3. Cargar feriados
+        if (Array.isArray(feriados)) {
+          feriadosDatabase = feriados;
+        }
+        
+        // 4. Cargar e integrar historial
+        if (Array.isArray(history)) {
+          Object.keys(employeesDatabase).forEach(dni => {
+            if (!attendanceState[dni]) {
+              attendanceState[dni] = { action: 'Desconectado', timestamp: null, history: [] };
+            } else {
+              attendanceState[dni].history = [];
+            }
+          });
+          
+          history.forEach(item => {
+            const dni = item.dni;
+            if (dni && attendanceState[dni]) {
+              const exists = attendanceState[dni].history.some(h => 
+                h.timestamp === item.timestamp && h.action === item.action
+              );
+              if (!exists) {
+                attendanceState[dni].history.push(item);
+              }
+            }
+          });
+          
+          const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+          const normToday = normalizeDateStr(todayStr);
+          
+          Object.keys(employeesDatabase).forEach(dni => {
+            const todayMarks = attendanceState[dni].history.filter(item => 
+              normalizeDateStr(item.dateStr) === normToday
+            );
+            if (todayMarks.length > 0) {
+              todayMarks.sort((a, b) => a.timestamp - b.timestamp);
+              const latestMark = todayMarks[todayMarks.length - 1];
+              attendanceState[dni].action = latestMark.action;
+              attendanceState[dni].timestamp = latestMark.timestamp;
+            } else {
+              attendanceState[dni].action = 'Desconectado';
+              attendanceState[dni].timestamp = null;
+            }
+          });
+        }
+        
+        saveState();
+        updateAdminView();
+        updateReportEmployeeSelect();
+        console.log("Sincronización unificada completada con éxito.");
+      } else {
+        throw new Error("Formato de respuesta incorrecto");
+      }
+    })
+    .catch(err => {
+      console.warn("Fallo la sincronización unificada. Usando fallback individual...", err);
+      return syncEmployeesFromGoogleSheets().then(() => {
+        syncJustificacionesFromGoogleSheets();
+        syncFeriadosFromGoogleSheets();
+        syncAllAttendanceStatesFromHistory();
+      });
+    });
+}
+
 // Configurar el Modal de Cambio de PIN para los empleados
 function setupChangePinModal() {
   const btnTrigger = document.getElementById('btn-change-pin-trigger');
@@ -892,9 +1110,9 @@ function setupEventListeners() {
   }
 
   // Button hooks for Exports and PDF
-  const btnExportAgentCsv = document.getElementById('btn-export-agent-csv');
-  if (btnExportAgentCsv) {
-    btnExportAgentCsv.addEventListener('click', exportAgentReportCSV);
+  const btnExportAgentExcel = document.getElementById('btn-export-agent-excel');
+  if (btnExportAgentExcel) {
+    btnExportAgentExcel.addEventListener('click', exportAgentReportExcel);
   }
 
   const btnExportAgentPdf = document.getElementById('btn-export-agent-pdf');
@@ -909,9 +1127,9 @@ function setupEventListeners() {
     });
   }
 
-  const btnExportConsolidatedCsv = document.getElementById('btn-export-consolidated-csv');
-  if (btnExportConsolidatedCsv) {
-    btnExportConsolidatedCsv.addEventListener('click', exportConsolidatedCSV);
+  const btnExportConsolidatedExcel = document.getElementById('btn-export-consolidated-excel');
+  if (btnExportConsolidatedExcel) {
+    btnExportConsolidatedExcel.addEventListener('click', exportConsolidatedExcel);
   }
 
   // Refresh URL input every time admin view is shown
@@ -1870,10 +2088,24 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
 
   // Evaluar tardanza (entradaReal vs workStart + tolerancia) - No aplica en descanso, feriado o justificado
   let tardiness = false;
+  let tardinessSeconds = 0;
   if (!isRestDayOrHolidayOrJustified) {
     const actualEntrySeconds = timeStrToSeconds(entradaReal);
     const scheduledEntrySeconds = timeStrToSeconds(daySched.workStart || "08:00");
     tardiness = actualEntrySeconds > (scheduledEntrySeconds + (tardinessTolerance * 60));
+    if (actualEntrySeconds > scheduledEntrySeconds) {
+      tardinessSeconds = actualEntrySeconds - scheduledEntrySeconds;
+    }
+  }
+
+  // Evaluar horas adicionales (overtime en día laborable normal)
+  let horasAdicionalesSeconds = 0;
+  if (!isRestDayOrHolidayOrJustified && salidaMark) {
+    const actualExitSeconds = timeStrToSeconds(salidaReal);
+    const scheduledExitSeconds = timeStrToSeconds(daySched.workEnd || "17:00");
+    if (actualExitSeconds > scheduledExitSeconds) {
+      horasAdicionalesSeconds = actualExitSeconds - scheduledExitSeconds;
+    }
   }
 
   // Evaluar exceso de break
@@ -1899,6 +2131,8 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     diffSeconds,
     diffClass,
     tardiness,
+    tardinessSeconds,
+    horasAdicionalesSeconds,
     breakMinutes,
     workedMinutes,
     excessBreakMinutes,
@@ -2078,6 +2312,24 @@ function updateReportEmployeeSelect() {
   }
 }
 
+// Obtener el historial completo consolidado desde el cache local
+function getAllCachedHistory() {
+  const history = [];
+  Object.keys(employeesDatabase).forEach(dni => {
+    if (attendanceState[dni] && Array.isArray(attendanceState[dni].history)) {
+      attendanceState[dni].history.forEach(item => {
+        const exists = history.some(h => 
+          h.dni === item.dni && h.timestamp === item.timestamp && h.action === item.action
+        );
+        if (!exists) {
+          history.push(item);
+        }
+      });
+    }
+  });
+  return history;
+}
+
 // Renderizar tabla de reportes históricos del colaborador seleccionado
 function renderAgentReport(dni) {
   const tbody = document.getElementById('admin-report-table-body');
@@ -2086,7 +2338,7 @@ function renderAgentReport(dni) {
 
   const employee = employeesDatabase[dni];
   if (!employee) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 25px;">Colaborador no encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">Colaborador no encontrado.</td></tr>';
     return;
   }
 
@@ -2111,34 +2363,9 @@ function renderAgentReport(dni) {
   // Mostrar resumen de horario del día actual al cargar
   updateScheduleSummary(employee, new Date());
 
-
   const state = attendanceState[dni] || { history: [] };
-  const localHistory = state.history || [];
-
-  if (googleScriptUrl) {
-    // Mostrar mensaje de carga con animación
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 30px;"><span class="animate-pulse" style="display: inline-flex; align-items: center; gap: 8px;"><span class="material-symbols-rounded animate-spin">sync</span> Cargando historial desde Google Sheets...</span></td></tr>';
-    
-    // Consultar el historial real al script de Google
-    fetch(`${googleScriptUrl}?action=get_history&dni=${dni}`)
-      .then(res => res.json())
-      .then(res => {
-        if (res.status === "ok" && Array.isArray(res.data)) {
-          cachedAgentHistory = res.data;
-        } else {
-          cachedAgentHistory = localHistory;
-        }
-        renderReportTable(cachedAgentHistory, employee);
-      })
-      .catch(err => {
-        console.error("Error cargando historial de nube:", err);
-        cachedAgentHistory = localHistory;
-        renderReportTable(cachedAgentHistory, employee);
-      });
-  } else {
-    cachedAgentHistory = localHistory;
-    renderReportTable(cachedAgentHistory, employee);
-  }
+  cachedAgentHistory = state.history || [];
+  renderReportTable(cachedAgentHistory, employee);
 }
 
 // Función auxiliar para construir la tabla del reporte
@@ -2147,7 +2374,7 @@ function renderReportTable(history, employee) {
   if (!tbody) return;
 
   if (!history || history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 25px;">No se registran marcas de asistencia históricas para este colaborador.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">No se registran marcas de asistencia históricas para este colaborador.</td></tr>';
     return;
   }
 
@@ -2183,7 +2410,7 @@ function renderReportTable(history, employee) {
         }
       }
     }
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 25px;">No hay marcas registradas para el rango de fechas seleccionado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">No hay marcas registradas para el rango de fechas seleccionado.</td></tr>';
     return;
   }
 
@@ -2232,10 +2459,6 @@ function renderReportTable(history, employee) {
     const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
     const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
     
-    const tardinessBadge = report.tardiness 
-      ? `<span class="badge-tardiness"><span class="material-symbols-rounded">warning</span>Tardanza</span>` 
-      : '';
-
     const excessBreakBadge = report.hasExcessBreak 
       ? `<span class="badge-excess-break"><span class="material-symbols-rounded">warning</span>Exceso: ${report.excessBreakMinutes}m</span>` 
       : '';
@@ -2243,9 +2466,11 @@ function renderReportTable(history, employee) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="font-weight: 600;">${dateStr}</td>
-      <td class="table-timestamp text-center">${report.entradaReal}${tardinessBadge}</td>
+      <td class="table-timestamp text-center">${report.entradaReal}</td>
+      <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
       <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
       <td class="table-timestamp text-center">${report.salidaReal}</td>
+      <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
       <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}${excessBreakBadge}</td>
       <td class="text-center" style="font-weight: 600; color: var(--text-primary); white-space: nowrap;">${report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00'}</td>
       <td class="text-center" style="white-space: nowrap;">
@@ -2424,25 +2649,8 @@ function loadConsolidatedReport() {
   const tbody = document.getElementById('admin-consolidated-table-body');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding: 30px;"><span class="animate-pulse" style="display: inline-flex; align-items: center; gap: 8px;"><span class="material-symbols-rounded animate-spin">sync</span> Cargando historial consolidado...</span></td></tr>';
-  
-  let fetchPromise;
-  if (googleScriptUrl) {
-    fetchPromise = fetchAllHistoryFromGoogleSheets();
-  } else {
-    fetchPromise = fetchAllHistoryLocal();
-  }
-  
-  fetchPromise
-    .then(history => {
-      cachedConsolidatedHistory = history;
-      renderConsolidatedTable(cachedConsolidatedHistory);
-    })
-    .catch(err => {
-      console.error("Error cargando reporte consolidado:", err);
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding: 25px; color: var(--text-error);">Error al cargar los datos del reporte consolidado.</td></tr>';
-      showToast('error', 'Error de Reporte', 'No se pudo cargar el historial consolidado.');
-    });
+  cachedConsolidatedHistory = getAllCachedHistory();
+  renderConsolidatedTable(cachedConsolidatedHistory);
 }
 
 // Lógica de pestañas del panel administrativo
@@ -2508,10 +2716,49 @@ function setupAdminTabs() {
     });
   }
 
+  const btnSyncAdmin = document.getElementById('btn-admin-sync');
+  if (btnSyncAdmin) {
+    btnSyncAdmin.addEventListener('click', () => {
+      const originalHTML = btnSyncAdmin.innerHTML;
+      btnSyncAdmin.disabled = true;
+      btnSyncAdmin.innerHTML = `<span>Sincronizando...</span><span class="material-symbols-rounded animate-spin">sync</span>`;
+      
+      syncInitialData()
+        .then(() => {
+          showToast('success', 'Sincronización Completa', 'Se han descargado los últimos datos de la nube.');
+          // Recargar pestaña activa
+          const activeTabButton = document.querySelector('.btn-admin-tab.active');
+          if (activeTabButton) {
+            const tabName = activeTabButton.getAttribute('data-tab');
+            if (tabName === 'live') {
+              updateAdminView();
+            } else if (tabName === 'reports') {
+              const selectReportEmp = document.getElementById('select-report-employee');
+              if (selectReportEmp && selectReportEmp.value) {
+                renderAgentReport(selectReportEmp.value);
+              }
+            } else if (tabName === 'consolidated') {
+              loadConsolidatedReport();
+            } else if (tabName === 'monthly') {
+              loadMonthlyReport();
+            }
+          }
+        })
+        .catch(err => {
+          console.error("Error en sincronización manual:", err);
+          showToast('error', 'Error de Conexión', 'No se pudo completar la sincronización.');
+        })
+        .finally(() => {
+          btnSyncAdmin.disabled = false;
+          btnSyncAdmin.innerHTML = originalHTML;
+        });
+    });
+  }
+
   const btnRefreshConsolidated = document.getElementById('btn-refresh-consolidated');
   if (btnRefreshConsolidated) {
     btnRefreshConsolidated.addEventListener('click', () => {
-      syncEmployeesFromGoogleSheets().then(() => {
+      syncInitialData().then(() => {
         loadConsolidatedReport();
       });
       showToast('info', 'Actualizando...', 'Sincronizando colaboradores y reporte consolidado.');
@@ -2697,7 +2944,7 @@ function setupEditModalListeners() {
 
 // --- LÓGICA DE EXPORTACIÓN DE REPORTES A CSV (EXCEL COMPATIBLE) ---
 
-function exportAgentReportCSV() {
+function exportAgentReportExcel() {
   const select = document.getElementById('select-report-employee');
   if (!select || !select.value) {
     showToast('warning', 'Selecciona colaborador', 'Primero debes elegir un colaborador para exportar.');
@@ -2749,17 +2996,20 @@ function exportAgentReportCSV() {
     return dateB - dateA;
   });
   
-  // Generar contenido CSV
-  let csvContent = "";
-  // Cabecera informativa para contexto en Excel
-  csvContent += `Reporte de Asistencia - ${employee.name}\n`;
-  csvContent += `DNI;${dni}\n`;
-  csvContent += `Cargo;${employee.role}\n`;
-  csvContent += `Jornada Planificada;${employee.workStart} a ${employee.workEnd}\n`;
-  csvContent += `Rango de Fechas;${startDate || 'Inicio'} al ${endDate || 'Fin'}\n\n`;
+  // Crear libro de Excel
+  const wb = XLSX.utils.book_new();
   
-  // Columnas
-  csvContent += "Fecha;Entrada Real;Refrigerio Real (Inicio -> Fin);Salida Real;Refrigerio Total;Exceso de Break (minutos);Trabajo Real;Diferencia;Tardanza\n";
+  const rows = [];
+  rows.push(["Reporte de Asistencia Personalizado"]);
+  rows.push(["Colaborador:", employee.name]);
+  rows.push(["DNI:", dni]);
+  rows.push(["Cargo:", employee.role]);
+  rows.push(["Jornada Planificada:", `${employee.workStart} a ${employee.workEnd}`]);
+  rows.push(["Rango de Fechas:", `${startDate || 'Inicio'} al ${endDate || 'Fin'}`]);
+  rows.push([]); // Línea vacía
+  
+  // Cabecera
+  rows.push(["Fecha", "Entrada Real", "Tardanza", "Refrigerio Real (Inicio -> Fin)", "Salida Real", "Horas Extra", "Refrigerio Total", "Exceso de Break (min)", "Trabajo Real", "Diferencia"]);
   
   sortedDates.forEach(dateStr => {
     const dayMarks = grouped[dateStr].sort((a, b) => a.timestamp - b.timestamp);
@@ -2769,29 +3019,42 @@ function exportAgentReportCSV() {
     const excessBreakMin = report.excessBreakMinutes > 0 ? report.excessBreakMinutes : 0;
     const workedStr = report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00';
     const diffStr = report.status;
-    const tardyStr = report.tardiness ? "SI" : "NO";
+    const tardyStr = report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00';
+    const extraHrsStr = report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00';
     
-    csvContent += `"${dateStr}";"${report.entradaReal}";"${report.breakReal}";"${report.salidaReal}";"${breakStr}";${excessBreakMin};"${workedStr}";"${diffStr}";"${tardyStr}"\n`;
+    rows.push([
+      dateStr,
+      report.entradaReal,
+      tardyStr,
+      report.breakReal,
+      report.salidaReal,
+      extraHrsStr,
+      breakStr,
+      excessBreakMin,
+      workedStr,
+      diffStr
+    ]);
   });
   
-  // Descargar archivo con BOM UTF-8 (para caracteres en español)
-  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  
+  // Auto-ajustar ancho de columnas
+  const colWidths = rows[7].map((_, colIndex) => {
+    const maxLen = Math.max(...rows.slice(7).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
+    return { wch: Math.max(12, maxLen + 3) };
+  });
+  ws['!cols'] = colWidths;
+  
+  XLSX.utils.book_append_sheet(wb, ws, "Reporte Colaborador");
   
   const cleanName = employee.name.replace(/[^a-zA-Z0-9]/g, "_");
   const dateRangeStr = `${startDate || 'inicio'}_a_${endDate || 'fin'}`;
-  link.setAttribute("href", url);
-  link.setAttribute("download", `Reporte_Asistencia_${cleanName}_${dateRangeStr}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
   
-  showToast('success', 'Exportación Completa', 'Se descargó el reporte del colaborador en formato CSV.');
+  XLSX.writeFile(wb, `Reporte_Asistencia_${cleanName}_${dateRangeStr}.xlsx`);
+  showToast('success', 'Exportación Completa', 'Se descargó el reporte del colaborador en formato Excel (.xlsx).');
 }
 
-function exportConsolidatedCSV() {
+function exportConsolidatedExcel() {
   if (!cachedConsolidatedHistory || cachedConsolidatedHistory.length === 0) {
     showToast('warning', 'Sin datos', 'No hay datos consolidados para exportar.');
     return;
@@ -2837,21 +3100,22 @@ function exportConsolidatedCSV() {
     dataMap[item.dni][item.dateStr].push(item);
   });
   
-  let csvContent = "";
-  csvContent += `Resumen Consolidado de Asistencia - Horas Trabajadas\n`;
-  csvContent += `Rango de Fechas;${startDate || 'Inicio'} al ${endDate || 'Fin'}\n\n`;
+  const wb = XLSX.utils.book_new();
+  const rows = [];
   
-  // Cabecera: Colaborador;DNI;Fecha1;Fecha2;...
-  csvContent += "Colaborador;DNI";
-  sortedDates.forEach(dateStr => {
-    csvContent += `;"${dateStr}"`;
-  });
-  csvContent += "\n";
+  rows.push(["Resumen Consolidado de Asistencia - Horas Trabajadas"]);
+  rows.push(["Rango de Fechas:", `${startDate || 'Inicio'} al ${endDate || 'Fin'}`]);
+  rows.push([]);
+  
+  // Cabecera
+  const header = ["Colaborador", "DNI"];
+  sortedDates.forEach(dateStr => header.push(dateStr));
+  rows.push(header);
   
   // Filas por cada colaborador
   Object.keys(employeesDatabase).forEach(dni => {
     const employee = employeesDatabase[dni];
-    csvContent += `"${employee.name}";"${dni}"`;
+    const row = [employee.name, dni];
     
     sortedDates.forEach(dateStr => {
       const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
@@ -2863,34 +3127,34 @@ function exportConsolidatedCSV() {
         
         if (hasSalida) {
           if (report.workedSeconds > 0) {
-            csvContent += `;"${formatSecondsToHHMMSS(report.workedSeconds)}${tardyMarker}"`;
+            row.push(`${formatSecondsToHHMMSS(report.workedSeconds)}${tardyMarker}`);
           } else {
-            csvContent += `;"00:00:00${tardyMarker}"`;
+            row.push(`00:00:00${tardyMarker}`);
           }
         } else {
-          csvContent += `;"--${tardyMarker}"`;
+          row.push(`--${tardyMarker}`);
         }
       } else {
-        csvContent += `;"---"`;
+        row.push("---");
       }
     });
-    csvContent += "\n";
+    rows.push(row);
   });
   
-  // Descargar archivo con BOM UTF-8
-  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const ws = XLSX.utils.aoa_to_sheet(rows);
   
+  // Auto-ajustar columnas
+  const colWidths = header.map((_, colIndex) => {
+    const maxLen = Math.max(...rows.slice(3).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
+    return { wch: Math.max(12, maxLen + 3) };
+  });
+  ws['!cols'] = colWidths;
+  
+  XLSX.utils.book_append_sheet(wb, ws, "Resumen Consolidado");
   const dateRangeStr = `${startDate || 'inicio'}_a_${endDate || 'fin'}`;
-  link.setAttribute("href", url);
-  link.setAttribute("download", `Resumen_Consolidado_Asistencia_${dateRangeStr}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  XLSX.writeFile(wb, `Resumen_Consolidado_Asistencia_${dateRangeStr}.xlsx`);
   
-  showToast('success', 'Exportación Completa', 'Se descargó el resumen consolidado en formato CSV.');
+  showToast('success', 'Exportación Completa', 'Se descargó el resumen consolidado en formato Excel (.xlsx).');
 }
 
 /* ==========================================================================
@@ -3003,9 +3267,9 @@ function setupMonthlyReportUIListeners() {
     btnFilter.addEventListener('click', loadMonthlyReport);
   }
 
-  const btnExport = document.getElementById('btn-export-monthly-csv');
-  if (btnExport) {
-    btnExport.addEventListener('click', exportMonthlyCSV);
+  const btnExportExcel = document.getElementById('btn-export-monthly-excel');
+  if (btnExportExcel) {
+    btnExportExcel.addEventListener('click', exportMonthlyExcel);
   }
 }
 
@@ -3013,24 +3277,14 @@ function loadMonthlyReport() {
   const tbody = document.getElementById('admin-monthly-table-body');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 30px;"><span class="animate-pulse" style="display: inline-flex; align-items: center; gap: 8px;"><span class="material-symbols-rounded animate-spin">sync</span> Procesando reporte mensual...</span></td></tr>';
-  
-  let fetchPromise;
-  if (googleScriptUrl) {
-    fetchPromise = fetchAllHistoryFromGoogleSheets();
-  } else {
-    fetchPromise = fetchAllHistoryLocal();
+  const monthInput = document.getElementById('monthly-select-month');
+  if (!monthInput || !monthInput.value) {
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 25px;">Por favor selecciona un mes válido.</td></tr>';
+    return;
   }
   
-  fetchPromise
-    .then(history => {
-      renderMonthlyTable(history);
-    })
-    .catch(err => {
-      console.error("Error cargando reporte mensual:", err);
-      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px; color: var(--text-error);">Error al cargar los datos del reporte mensual.</td></tr>';
-      showToast('error', 'Error de Reporte', 'No se pudo cargar el historial mensual.');
-    });
+  const history = getAllCachedHistory();
+  renderMonthlyTable(history);
 }
 
 function renderMonthlyTable(history) {
@@ -3039,7 +3293,7 @@ function renderMonthlyTable(history) {
 
   const monthInput = document.getElementById('monthly-select-month');
   if (!monthInput || !monthInput.value) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 25px;">Por favor selecciona un mes válido.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 25px;">Por favor selecciona un mes válido.</td></tr>';
     return;
   }
 
@@ -3090,7 +3344,7 @@ function renderMonthlyTable(history) {
   const dnis = Object.keys(employeesDatabase);
   
   if (dnis.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 25px;">No hay colaboradores registrados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 25px;">No hay colaboradores registrados.</td></tr>';
     return;
   }
 
@@ -3108,6 +3362,7 @@ function renderMonthlyTable(history) {
     let diasFeriados = 0;
     let diasDescanso = 0;
     let horasExtraSeconds = 0; // Horas trabajadas en feriados/descanso
+    let horasAdicionalesSeconds = 0; // Horas adicionales (Salida real > Salida programada)
 
     let schedObj = employee.weeklySchedule;
     if (typeof schedObj === 'string' && schedObj.trim() !== '') {
@@ -3187,6 +3442,10 @@ function renderMonthlyTable(history) {
           if (report.excessBreakSeconds > 0) {
             excessBreakSeconds += report.excessBreakSeconds;
           }
+          
+          if (report.horasAdicionalesSeconds > 0) {
+            horasAdicionalesSeconds += report.horasAdicionalesSeconds;
+          }
         } else {
           // Trabajó en feriado o día de descanso → horas extra
           if (report.workedSeconds > 0) {
@@ -3221,16 +3480,17 @@ function renderMonthlyTable(history) {
       <td class="text-center" style="font-weight: 600; color: ${faltas > 0 ? 'var(--color-error)' : 'var(--text-secondary)'};">${faltas}</td>
       <td class="text-center" style="font-weight: 600; color: ${diasJustificados > 0 ? '#ffa500' : 'var(--text-secondary)'};">${diasJustificados}</td>
       <td class="text-center" style="font-weight: 600; color: ${tardanzasCount > 0 ? 'var(--color-warning)' : 'var(--text-secondary)'};">${tardanzasCount}</td>
-      <td class="text-center">${tardanzasSeconds > 0 ? formatSecondsToHHMMSS(tardanzasSeconds) : '00:00:00'}</td>
+      <td class="text-center" style="${tardanzasSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${tardanzasSeconds > 0 ? formatSecondsToHHMMSS(tardanzasSeconds) : '00:00:00'}</td>
       <td class="text-center" style="color: ${excessBreakSeconds > 0 ? 'var(--color-warning)' : 'var(--text-secondary)'};">${excessBreakSeconds > 0 ? formatSecondsToHHMMSS(excessBreakSeconds) : '00:00:00'}</td>
       <td class="text-center" style="font-weight: 600; color: var(--text-primary);">${totalWorkedSeconds > 0 ? formatSecondsToHHMMSS(totalWorkedSeconds) : '00:00:00'}</td>
+      <td class="text-center" style="font-weight: 600; color: var(--text-primary);">${horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(horasAdicionalesSeconds) : '00:00:00'}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
 
-function exportMonthlyCSV() {
+function exportMonthlyExcel() {
   const monthInput = document.getElementById('monthly-select-month');
   if (!monthInput || !monthInput.value) {
     showToast('warning', 'Selecciona mes', 'Primero debes elegir un mes para exportar.');
@@ -3241,172 +3501,184 @@ function exportMonthlyCSV() {
   const year = parseInt(yearStr, 10);
   const monthIndex = parseInt(monthStr, 10) - 1;
 
-  let fetchPromise;
-  if (googleScriptUrl) {
-    fetchPromise = fetchAllHistoryFromGoogleSheets();
-  } else {
-    fetchPromise = fetchAllHistoryLocal();
+  const history = getAllCachedHistory();
+  
+  const normalizedHistory = history.map(item => {
+    const normDate = normalizeDateStr(item.dateStr);
+    const normTime = normalizeTimeStr(item.timeStr);
+    const ts = getTimestampFromDateAndTime(normDate, normTime);
+    return {
+      ...item,
+      dateStr: normDate,
+      timeStr: normTime,
+      timestamp: ts
+    };
+  }).filter(item => {
+    if (!item.dni || !employeesDatabase[item.dni] || !item.dateStr) return false;
+    const parts = item.dateStr.split('/');
+    if (parts.length !== 3) return false;
+    const itemYear = parseInt(parts[2], 10);
+    const itemMonth = parseInt(parts[1], 10);
+    return itemYear === year && itemMonth === (monthIndex + 1);
+  });
+
+  const dataMap = {};
+  normalizedHistory.forEach(item => {
+    if (!dataMap[item.dni]) dataMap[item.dni] = {};
+    if (!dataMap[item.dni][item.dateStr]) dataMap[item.dni][item.dateStr] = [];
+    dataMap[item.dni][item.dateStr].push(item);
+  });
+
+  const now = new Date();
+  let lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  if (year === now.getFullYear() && monthIndex === now.getMonth()) {
+    lastDay = now.getDate();
+  } else if (year > now.getFullYear() || (year === now.getFullYear() && monthIndex > now.getMonth())) {
+    lastDay = 0;
   }
 
-  fetchPromise
-    .then(history => {
-      const normalizedHistory = history.map(item => {
-        const normDate = normalizeDateStr(item.dateStr);
-        const normTime = normalizeTimeStr(item.timeStr);
-        const ts = getTimestampFromDateAndTime(normDate, normTime);
-        return {
-          ...item,
-          dateStr: normDate,
-          timeStr: normTime,
-          timestamp: ts
-        };
-      }).filter(item => {
-        if (!item.dni || !employeesDatabase[item.dni] || !item.dateStr) return false;
-        const parts = item.dateStr.split('/');
-        if (parts.length !== 3) return false;
-        const itemYear = parseInt(parts[2], 10);
-        const itemMonth = parseInt(parts[1], 10);
-        return itemYear === year && itemMonth === (monthIndex + 1);
-      });
+  const FERIADOS = [
+    "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", 
+    "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+  ];
 
-      const dataMap = {};
-      normalizedHistory.forEach(item => {
-        if (!dataMap[item.dni]) dataMap[item.dni] = {};
-        if (!dataMap[item.dni][item.dateStr]) dataMap[item.dni][item.dateStr] = [];
-        dataMap[item.dni][item.dateStr].push(item);
-      });
+  const wb = XLSX.utils.book_new();
+  const rows = [];
+  
+  rows.push([`Resumen Mensual de Asistencia - ${selectedMonth}`]);
+  rows.push([]);
+  
+  const header = [
+    "Colaborador", "DNI", "Días Laborables", "Días Asistidos", "Faltas", 
+    "Días Justificados", "Tardanzas (Cant.)", "Tardanzas (Acum.)", 
+    "Exceso Break (Acum.)", "Trabajo Real (Total)", "Horas Extra"
+  ];
+  rows.push(header);
 
-      const now = new Date();
-      let lastDay = new Date(year, monthIndex + 1, 0).getDate();
-      if (year === now.getFullYear() && monthIndex === now.getMonth()) {
-        lastDay = now.getDate();
-      } else if (year > now.getFullYear() || (year === now.getFullYear() && monthIndex > now.getMonth())) {
-        lastDay = 0;
+  const dnis = Object.keys(employeesDatabase);
+  dnis.forEach(dni => {
+    const employee = employeesDatabase[dni];
+    
+    let diasLaborables = 0;
+    let diasAsistidos = 0;
+    let faltas = 0;
+    let diasJustificados = 0;
+    let tardanzasCount = 0;
+    let tardanzasSeconds = 0;
+    let excessBreakSeconds = 0;
+    let totalWorkedSeconds = 0;
+    let horasAdicionalesSeconds = 0;
+
+    let schedObj = employee.weeklySchedule;
+    if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+      try {
+        schedObj = JSON.parse(schedObj);
+      } catch (e) {
+        schedObj = null;
+      }
+    }
+    if (!schedObj) schedObj = {};
+
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = `${String(day).padStart(2, '0')}/${String(monthIndex + 1).padStart(2, '0')}/${year}`;
+      const dayStr = String(day).padStart(2, '0');
+      const monthStrPad = String(monthIndex + 1).padStart(2, '0');
+      const dayMonth = `${dayStr}/${monthStrPad}`;
+      
+      const d = new Date(year, monthIndex, day);
+      const dayOfWeek = d.getDay();
+
+      const isCustomHoliday = feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
+      const isHoliday = FERIADOS.includes(dayMonth) || isCustomHoliday;
+
+      let isRestDay = false;
+      if (schedObj[dayOfWeek]) {
+        isRestDay = !!schedObj[dayOfWeek].isRestDay;
+      } else {
+        isRestDay = (dayOfWeek === 0);
       }
 
-      const FERIADOS = [
-        "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", 
-        "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
-      ];
+      const isWorkday = !isRestDay && !isHoliday;
+      if (isWorkday) diasLaborables++;
 
-      let csvContent = "";
-      csvContent += `Resumen Mensual de Asistencia - ${selectedMonth}\n\n`;
-      csvContent += "Colaborador;DNI;Dias Laborables;Dias Asistidos;Faltas;Dias Justificados;Tardanzas (Cant.);Tardanzas (Acum.);Exceso Break (Acum.);Trabajo Real (Total)\n";
+      const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
+      const hasIngreso = dayMarks && dayMarks.some(m => m.action === 'Ingreso');
 
-      const dnis = Object.keys(employeesDatabase);
-      dnis.forEach(dni => {
-        const employee = employeesDatabase[dni];
+      if (hasIngreso) {
+        dayMarks.sort((a, b) => a.timestamp - b.timestamp);
+        const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
         
-        let diasLaborables = 0;
-        let diasAsistidos = 0;
-        let faltas = 0;
-        let diasJustificados = 0;
-        let tardanzasCount = 0;
-        let tardanzasSeconds = 0;
-        let excessBreakSeconds = 0;
-        let totalWorkedSeconds = 0;
-
-        let schedObj = employee.weeklySchedule;
-        if (typeof schedObj === 'string' && schedObj.trim() !== '') {
-          try {
-            schedObj = JSON.parse(schedObj);
-          } catch (e) {
-            schedObj = null;
-          }
-        }
-        if (!schedObj) schedObj = {};
-
-        for (let day = 1; day <= lastDay; day++) {
-          const dateStr = `${String(day).padStart(2, '0')}/${String(monthIndex + 1).padStart(2, '0')}/${year}`;
-          const dayStr = String(day).padStart(2, '0');
-          const monthStrPad = String(monthIndex + 1).padStart(2, '0');
-          const dayMonth = `${dayStr}/${monthStrPad}`;
+        if (isWorkday) {
+          diasAsistidos++;
           
-          const d = new Date(year, monthIndex, day);
-          const dayOfWeek = d.getDay();
-
-          const isCustomHoliday = feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
-          const isHoliday = FERIADOS.includes(dayMonth) || isCustomHoliday;
-
-          let isRestDay = false;
-          if (schedObj[dayOfWeek]) {
-            isRestDay = !!schedObj[dayOfWeek].isRestDay;
-          } else {
-            isRestDay = (dayOfWeek === 0);
+          if (report.tardiness) {
+            tardanzasCount++;
+            const actualEntrySec = timeStrToSeconds(report.entradaReal);
+            let schedEntry = "08:00";
+            if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
+              schedEntry = schedObj[dayOfWeek].workStart;
+            } else if (dayOfWeek === 6) {
+              schedEntry = employee.workStart || "09:00";
+            } else {
+              schedEntry = employee.workStart || "08:00";
+            }
+            const scheduledEntrySec = timeStrToSeconds(schedEntry);
+            const diff = actualEntrySec - scheduledEntrySec;
+            if (diff > 0) tardanzasSeconds += diff;
           }
 
-          const isWorkday = !isRestDay && !isHoliday;
-          if (isWorkday) diasLaborables++;
-
-          const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
-          const hasIngreso = dayMarks && dayMarks.some(m => m.action === 'Ingreso');
-
-          if (hasIngreso) {
-            dayMarks.sort((a, b) => a.timestamp - b.timestamp);
-            const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
-            
-            if (isWorkday) {
-              diasAsistidos++;
-              
-              if (report.tardiness) {
-                tardanzasCount++;
-                const actualEntrySec = timeStrToSeconds(report.entradaReal);
-                let schedEntry = "08:00";
-                if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
-                  schedEntry = schedObj[dayOfWeek].workStart;
-                } else if (dayOfWeek === 6) {
-                  schedEntry = employee.workStart || "09:00";
-                } else {
-                  schedEntry = employee.workStart || "08:00";
-                }
-                const scheduledEntrySec = timeStrToSeconds(schedEntry);
-                const diff = actualEntrySec - scheduledEntrySec;
-                if (diff > 0) tardanzasSeconds += diff;
-              }
-
-              if (report.excessBreakSeconds > 0) excessBreakSeconds += report.excessBreakSeconds;
-            }
-            
-            if (report.workedSeconds > 0) totalWorkedSeconds += report.workedSeconds;
+          if (report.excessBreakSeconds > 0) excessBreakSeconds += report.excessBreakSeconds;
+          if (report.horasAdicionalesSeconds > 0) horasAdicionalesSeconds += report.horasAdicionalesSeconds;
+        }
+        
+        if (report.workedSeconds > 0) totalWorkedSeconds += report.workedSeconds;
+      } else {
+        if (isWorkday) {
+          const justification = justificacionesDatabase.find(j => 
+            String(j.dni) === String(dni) && 
+            normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
+          );
+          if (justification) {
+            diasJustificados++;
           } else {
-            if (isWorkday) {
-              const justification = justificacionesDatabase.find(j => 
-                String(j.dni) === String(dni) && 
-                normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
-              );
-              if (justification) {
-                diasJustificados++;
-              } else {
-                faltas++;
-              }
-            }
+            faltas++;
           }
         }
+      }
+    }
 
-        const tardAcumStr = tardanzasSeconds > 0 ? formatSecondsToHHMMSS(tardanzasSeconds) : '00:00:00';
-        const breakAcumStr = excessBreakSeconds > 0 ? formatSecondsToHHMMSS(excessBreakSeconds) : '00:00:00';
-        const workedTotalStr = totalWorkedSeconds > 0 ? formatSecondsToHHMMSS(totalWorkedSeconds) : '00:00:00';
+    const tardAcumStr = tardanzasSeconds > 0 ? formatSecondsToHHMMSS(tardanzasSeconds) : '00:00:00';
+    const breakAcumStr = excessBreakSeconds > 0 ? formatSecondsToHHMMSS(excessBreakSeconds) : '00:00:00';
+    const workedTotalStr = totalWorkedSeconds > 0 ? formatSecondsToHHMMSS(totalWorkedSeconds) : '00:00:00';
+    const extraHrsStr = horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(horasAdicionalesSeconds) : '00:00:00';
 
-        csvContent += `"${employee.name}";"${dni}";${diasLaborables};${diasAsistidos};${faltas};${diasJustificados};${tardanzasCount};"${tardAcumStr}";"${breakAcumStr}";"${workedTotalStr}"\n`;
-      });
+    rows.push([
+      employee.name,
+      dni,
+      diasLaborables,
+      diasAsistidos,
+      faltas,
+      diasJustificados,
+      tardanzasCount,
+      tardAcumStr,
+      breakAcumStr,
+      workedTotalStr,
+      extraHrsStr
+    ]);
+  });
 
-      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      
-      link.setAttribute("href", url);
-      link.setAttribute("download", `Reporte_Mensual_Asistencia_${selectedMonth}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      showToast('success', 'Exportación Completa', 'Se descargó el reporte mensual en formato CSV.');
-    })
-    .catch(err => {
-      console.error("Error al exportar reporte mensual:", err);
-      showToast('error', 'Error al Exportar', 'Ocurrió un error al procesar la exportación del reporte mensual.');
-    });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  
+  // Auto-ajustar columnas
+  const colWidths = header.map((_, colIndex) => {
+    const maxLen = Math.max(...rows.slice(2).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
+    return { wch: Math.max(12, maxLen + 3) };
+  });
+  ws['!cols'] = colWidths;
+  
+  XLSX.utils.book_append_sheet(wb, ws, "Resumen Mensual");
+  XLSX.writeFile(wb, `Reporte_Mensual_Asistencia_${selectedMonth}.xlsx`);
+  showToast('success', 'Exportación Completa', 'Se descargó el reporte mensual en formato Excel (.xlsx).');
 }
 
 // ==========================================================================

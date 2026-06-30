@@ -690,7 +690,7 @@ input::-webkit-calendar-picker-indicator:hover {
 .admin-table tr:last-child td { border-bottom: none; }
 .admin-table tr:hover td      { background: var(--surface-1); }
 
-.table-employee-name { font-weight: 600; font-family: var(--font-display); color: var(--text-primary); }
+.table-employee-name { font-weight: 600; font-family: var(--font-display); color: var(--text-primary); white-space: nowrap; min-width: 180px; }
 .table-timestamp     { font-family: var(--font-display); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
 
 .table-status-badge {
@@ -970,11 +970,20 @@ input::-webkit-calendar-picker-indicator:hover {
 /* ── ESTILOS DE IMPRESIÓN (PDF NATIVO) ─────────────────────── */
 @media print {
   @page {
-    margin: 10mm;
+    size: A4 landscape; /* Forzar orientación horizontal para reportes con muchas columnas */
+    margin: 8mm 10mm;
   }
-  body {
+  
+  html, body {
     background: #ffffff !important;
     color: #000000 !important;
+    font-family: 'Outfit', 'Inter', sans-serif !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   
   .print-only {
@@ -991,6 +1000,7 @@ input::-webkit-calendar-picker-indicator:hover {
   .admin-tabs-nav,
   .report-filter-bar,
   .consolidated-filter-bar,
+  .monthly-filter-bar,
   #form-register-employee,
   .config-form,
   .test-connection-section,
@@ -1004,7 +1014,8 @@ input::-webkit-calendar-picker-indicator:hover {
   .table-employee-name button,
   .dashboard-user-bar,
   #tab-live-content th:last-child,
-  #admin-live-table-body td:last-child {
+  #admin-live-table-body td:last-child,
+  #btn-admin-sync {
     display: none !important;
   }
 
@@ -1029,7 +1040,6 @@ input::-webkit-calendar-picker-indicator:hover {
     width: 100% !important;
   }
 
-  /* Asegurar que las pestañas ocultas sigan ocultas y la activa se imprima completa */
   .admin-tab-content.hidden {
     display: none !important;
   }
@@ -1037,6 +1047,13 @@ input::-webkit-calendar-picker-indicator:hover {
   .admin-tab-content {
     display: block !important;
     width: 100% !important;
+  }
+
+  /* Evitar desbordes de tabla en el PDF */
+  .table-responsive {
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   .admin-table {
@@ -1050,21 +1067,31 @@ input::-webkit-calendar-picker-indicator:hover {
   .admin-table th, 
   .admin-table td {
     border: none !important;
-    border-bottom: 1px solid #e2e8f0 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
     color: #000000 !important;
     background: #ffffff !important;
-    padding: 6px 8px !important;
-    font-size: 0.75rem !important;
+    padding: 8px 6px !important;
+    font-size: 10px !important; /* Letra compacta para que quepa todo el reporte horizontal */
+    text-align: center !important;
+    white-space: nowrap !important;
   }
 
   .admin-table th {
-    border-bottom: 2px solid #cbd5e1 !important;
-    background: #f8fafc !important;
-    color: #000000 !important;
+    border-bottom: 2.5px solid #0f172a !important;
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
     font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 9.5px !important;
+    letter-spacing: 0.2px !important;
   }
 
-  /* Eliminar padding de contenedores en el PDF para ganar espacio horizontal */
+  /* Alinear nombres a la izquierda */
+  .admin-table td.table-employee-name {
+    text-align: left !important;
+    font-weight: 600 !important;
+  }
+
   .card-inner, 
   .report-container, 
   .report-results-wrapper {
@@ -1073,32 +1100,53 @@ input::-webkit-calendar-picker-indicator:hover {
     width: 100% !important;
   }
 
+  /* Encabezado formal Premium */
+  .print-header {
+    border-bottom: 2.5px double #0f172a !important;
+    padding-bottom: 15px !important;
+    margin-bottom: 20px !important;
+  }
+
+  .print-header h1 {
+    font-size: 1.8rem !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+  }
+
+  /* Caja de Horario Asignado Centrada */
   .report-agent-schedule-summary {
-    background: none !important;
-    border: none !important;
-    border-top: 1.5px solid #94a3b8 !important;
-    border-bottom: 1.5px solid #94a3b8 !important;
-    border-radius: 0 !important;
-    color: #000000 !important;
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    color: #0f172a !important;
     margin-bottom: 25px !important;
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    padding: 12px 0 !important;
+    padding: 14px 10px !important;
+    text-align: center !important;
+  }
+
+  .report-schedule-item {
+    border-right: 1px solid #cbd5e1 !important;
+  }
+
+  .report-schedule-item:last-child {
+    border-right: none !important;
   }
 
   .report-schedule-item h4 {
     color: #475569 !important;
     font-weight: 700 !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.5px !important;
+    font-size: 0.7rem !important;
+    letter-spacing: 0.8px !important;
     text-transform: uppercase !important;
-    margin-bottom: 3px !important;
+    margin-bottom: 5px !important;
   }
 
   .report-schedule-item p {
     color: #0f172a !important;
     font-weight: 700 !important;
-    font-size: 1.05rem !important;
+    font-size: 1.1rem !important;
   }
 
   .diff-negative {

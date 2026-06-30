@@ -24,7 +24,7 @@
       <div class="brand">
         <img src="icono.jpeg" alt="Logo de la empresa" class="img-logo">
         <div>
-          <h1>AsistenciaMSI</h1>
+          <h1>AsistenciaPro</h1>
           <p>Portal de Registro de Jornada</p>
         </div>
       </div>
@@ -237,10 +237,16 @@
               <span class="badge badge-admin">Acceso Administrativo</span>
             </div>
           </div>
-          <button id="btn-admin-close" class="btn-outline">
-            <span>Volver a Marcación</span>
-            <span class="material-symbols-rounded">arrow_back</span>
-          </button>
+          <div style="display: flex; gap: 10px;">
+            <button id="btn-admin-sync" class="btn-primary" style="background: var(--color-info); border-color: var(--color-info); height: 42px; display: inline-flex; align-items: center; gap: 8px;">
+              <span>Sincronizar Nube</span>
+              <span class="material-symbols-rounded">sync</span>
+            </button>
+            <button id="btn-admin-close" class="btn-outline" style="height: 42px; display: inline-flex; align-items: center; gap: 8px;">
+              <span>Volver a Marcación</span>
+              <span class="material-symbols-rounded">arrow_back</span>
+            </button>
+          </div>
         </div>
 
         <!-- Pestañas del Administrador -->
@@ -785,9 +791,9 @@
                 <span class="material-symbols-rounded">filter_list</span>
                 <span>Filtrar</span>
               </button>
-              <button id="btn-export-agent-csv" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+              <button id="btn-export-agent-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
                 <span class="material-symbols-rounded">download</span>
-                <span>Exportar CSV</span>
+                <span>Exportar Excel</span>
               </button>
               <button id="btn-export-agent-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
                 <span class="material-symbols-rounded">print</span>
@@ -817,8 +823,10 @@
                     <tr>
                       <th>Fecha</th>
                       <th class="text-center">Entrada</th>
+                      <th class="text-center">Tardanza</th>
                       <th class="text-center">Refrigerio (Inicio → Fin)</th>
                       <th class="text-center">Salida</th>
+                      <th class="text-center">Horas Adicionales</th>
                       <th class="text-center">Refrigerio (Total)</th>
                       <th class="text-center">Trabajo Real</th>
                       <th class="text-center">Diferencia</th>
@@ -826,7 +834,7 @@
                   </thead>
                   <tbody id="admin-report-table-body">
                     <tr>
-                      <td colspan="7" class="text-center text-muted" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                      <td colspan="9" class="text-center text-muted" style="text-align: center; padding: 30px; color: var(--text-muted);">
                         Selecciona un colaborador en la parte superior para cargar su historial diario.
                       </td>
                     </tr>
@@ -867,9 +875,9 @@
                 <span class="material-symbols-rounded">filter_list</span>
                 <span>Filtrar</span>
               </button>
-              <button id="btn-export-consolidated-csv" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+              <button id="btn-export-consolidated-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
                 <span class="material-symbols-rounded">download</span>
-                <span>Exportar CSV</span>
+                <span>Exportar Excel</span>
               </button>
               <button id="btn-refresh-consolidated" class="btn-outline" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; height: 42px; border-radius: var(--radius-md); margin-left: auto;">
                 <span class="material-symbols-rounded" style="font-size: 18px;">sync</span>
@@ -925,9 +933,9 @@
                 <span class="material-symbols-rounded">filter_list</span>
                 <span>Procesar</span>
               </button>
-              <button id="btn-export-monthly-csv" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+              <button id="btn-export-monthly-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
                 <span class="material-symbols-rounded">download</span>
-                <span>Exportar CSV</span>
+                <span>Exportar Excel</span>
               </button>
             </div>
 
@@ -949,11 +957,12 @@
                     <th class="text-center">Tardanzas (Acum.)</th>
                     <th class="text-center">Exceso Break (Acum.)</th>
                     <th class="text-center">Trabajo Real (Total)</th>
+                    <th class="text-center">Horas Extra</th>
                   </tr>
                 </thead>
                 <tbody id="admin-monthly-table-body">
                   <tr>
-                    <td colspan="10" class="text-center text-muted" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    <td colspan="11" class="text-center text-muted" style="text-align: center; padding: 30px; color: var(--text-muted);">
                       Selecciona un mes y presiona Procesar para cargar el resumen mensual.
                     </td>
                   </tr>
@@ -1196,10 +1205,12 @@
     <div id="toast-container" class="toast-container"></div>
 
     <footer class="app-footer">
-      <p>&copy; 2026 AsistenciaMSI. Diseñado para optimización laboral.</p>
+      <p>&copy; 2026 AsistenciaPro. Diseñado para optimización laboral.</p>
     </footer>
   </div>
 
+  <!-- Biblioteca SheetJS (XLSX) para exportación nativa a Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
