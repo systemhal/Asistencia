@@ -1033,11 +1033,16 @@ input::-webkit-calendar-picker-indicator:hover {
     color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important; /* Quitar puntas curvas al imprimir */
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+  }
+
+  .card::before {
+    display: none !important; /* Quitar la barra degradada superior en impresión */
   }
 
   .admin-tab-content.hidden {
@@ -1059,37 +1064,50 @@ input::-webkit-calendar-picker-indicator:hover {
   .admin-table {
     width: 100% !important;
     border-collapse: collapse !important;
-    background: #ffffff !important;
-    color: #000000 !important;
+    background: transparent !important;
+    color: #334155 !important;
     margin-top: 15px !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
   .admin-table th, 
   .admin-table td {
     border: none !important;
-    border-bottom: 1px solid #cbd5e1 !important;
-    color: #000000 !important;
-    background: #ffffff !important;
-    padding: 8px 6px !important;
-    font-size: 10px !important; /* Letra compacta para que quepa todo el reporte horizontal */
+    color: #334155 !important;
+    background: transparent !important;
+    padding: 8px 4px !important; /* Padding horizontal reducido para evitar desbordes */
+    font-size: 10.5px !important; /* Fuente compacta legible */
     text-align: center !important;
-    white-space: nowrap !important;
+  }
+
+  .admin-table td {
+    white-space: nowrap !important; /* Evitar que los datos se rompan en dos líneas */
   }
 
   .admin-table th {
-    border-bottom: 2.5px solid #0f172a !important;
-    background: #f1f5f9 !important;
-    color: #0f172a !important;
+    border-bottom: 2px solid #ef4444 !important; /* Línea roja elegante abajo del header */
+    background: transparent !important; /* Sin fondo */
+    color: #0f172a !important; /* Texto oscuro */
     font-weight: 700 !important;
     text-transform: uppercase !important;
-    font-size: 9.5px !important;
-    letter-spacing: 0.2px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.3px !important;
+    white-space: normal !important; /* Permitir salto de línea en encabezados largos */
+    vertical-align: bottom !important;
+    line-height: 1.2 !important;
+  }
+
+  .admin-table tbody tr:nth-child(even) td {
+    background: #f8fafc !important; /* Cebra sutil */
   }
 
   /* Alinear nombres a la izquierda */
   .admin-table td.table-employee-name {
     text-align: left !important;
     font-weight: 600 !important;
+    white-space: normal !important; /* Permitir envoltura si es necesario */
+    min-width: auto !important; /* Remover el min-width de 180px que empujaba la tabla */
   }
 
   .card-inner, 
@@ -1098,36 +1116,48 @@ input::-webkit-calendar-picker-indicator:hover {
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
   /* Encabezado formal Premium */
   .print-header {
-    border-bottom: 2.5px double #0f172a !important;
-    padding-bottom: 15px !important;
-    margin-bottom: 20px !important;
+    border-bottom: 2px solid #e2e8f0 !important; /* Línea gris sutil */
+    padding-bottom: 18px !important;
+    margin-bottom: 25px !important;
+    background: transparent !important;
   }
 
   .print-header h1 {
-    font-size: 1.8rem !important;
+    font-size: 1.9rem !important;
     color: #0f172a !important;
     font-weight: 800 !important;
+    margin-bottom: 4px !important;
   }
 
-  /* Caja de Horario Asignado Centrada */
+  /* Caja de Horario Asignado Centrada (Sin fondo, sin marcos) */
   .report-agent-schedule-summary {
-    background: #f8fafc !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 6px !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid #e2e8f0 !important; /* Solo línea divisoria abajo */
+    border-radius: 0 !important;
     color: #0f172a !important;
-    margin-bottom: 25px !important;
+    margin-bottom: 30px !important;
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    padding: 14px 10px !important;
+    padding: 16px 0 !important;
     text-align: center !important;
+    gap: 10px !important;
+  }
+
+  .signature-block {
+    page-break-inside: avoid !important;
+    margin-top: 50px !important;
   }
 
   .report-schedule-item {
-    border-right: 1px solid #cbd5e1 !important;
+    border-right: 1.5px solid #cbd5e1 !important;
   }
 
   .report-schedule-item:last-child {

@@ -377,17 +377,15 @@
 
         <!-- CONTENIDO PESTAÑA 2: REGISTRAR COLABORADOR Y CONFIGURACIÓN -->
         <div id="tab-register-content" class="admin-tab-content hidden">
-          <div class="dashboard-grid admin-panel-layout">
-            
-            <!-- Columna Izquierda: Registrar Nuevo Colaborador -->
-            <div class="dashboard-col admin-main-col">
-              <div class="card-inner">
-                <div class="inner-header">
-                  <h3>Registrar Nuevo Colaborador</h3>
-                  <span class="material-symbols-rounded text-gradient">person_add</span>
-                </div>
-                <form id="form-register-employee" onsubmit="event.preventDefault(); return false;">
-                  
+          <div class="card-inner" style="margin-bottom: 25px;">
+            <div class="inner-header">
+              <h3>Registrar Nuevo Colaborador</h3>
+              <span class="material-symbols-rounded text-gradient">person_add</span>
+            </div>
+            <form id="form-register-employee" onsubmit="event.preventDefault(); return false;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;">
+                <!-- Columna 1: Información Personal -->
+                <div>
                   <div class="input-group">
                     <label for="reg-dni">Número de DNI</label>
                     <div class="input-wrapper">
@@ -427,15 +425,17 @@
                     </div>
                   </div>
 
-                  <div class="input-group">
+                  <div class="input-group" style="margin-bottom: 0;">
                     <label for="reg-role">Cargo / Puesto</label>
                     <div class="input-wrapper">
                       <span class="material-symbols-rounded input-icon">work</span>
                       <input type="text" id="reg-role" placeholder="Ej. Operaciones" required>
                     </div>
                   </div>
+                </div>
 
-                  <!-- Nuevos Campos: Horario de Jornada -->
+                <!-- Columna 2: Horarios de Trabajo -->
+                <div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
                     <div class="input-group" style="margin-bottom: 0;">
                       <label for="reg-work-start">Entrada de Jornada</label>
@@ -453,7 +453,6 @@
                     </div>
                   </div>
 
-                  <!-- Nuevos Campos: Horario de Break -->
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
                     <div class="input-group" style="margin-bottom: 0;">
                       <label for="reg-break-start">Inicio de Break</label>
@@ -471,7 +470,6 @@
                     </div>
                   </div>
 
-                  <!-- Configuración Semanal Acordeón -->
                   <div class="weekly-schedule-config-trigger" style="margin-top: 15px; margin-bottom: 10px;">
                     <button type="button" id="btn-toggle-reg-weekly-schedule" class="btn-outline w-full" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px;">
                       <span class="material-symbols-rounded">calendar_month</span>
@@ -479,7 +477,7 @@
                       <span class="material-symbols-rounded arrow-icon">keyboard_arrow_down</span>
                     </button>
                   </div>
-                  <div id="reg-weekly-schedule-fields" class="hidden" style="background: var(--surface-1); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 15px; max-height: 250px; overflow-y: auto;">
+                  <div id="reg-weekly-schedule-fields" class="hidden" style="background: var(--surface-1); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 0; max-height: 250px; overflow-y: auto;">
                     <div style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; font-weight: 600; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
                       <span>Día</span>
                       <span>Entrada</span>
@@ -546,54 +544,14 @@
                       <input type="checkbox" class="reg-day-nobreak" disabled style="opacity: 0.5; transform: scale(1.1); justify-self: center; cursor: pointer;">
                     </div>
                   </div>
-
-                  <button type="submit" class="btn-primary w-full" style="margin-top: 10px;">
-                    <span>Registrar en Sistema</span>
-                    <span class="material-symbols-rounded">person_add</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <!-- Columna Derecha: Configuración y Conexión de Hoja -->
-            <div class="dashboard-col admin-config-col">
-              <div class="card-inner">
-                <div class="inner-header">
-                  <h3>Integración con Google Sheets</h3>
-                  <span class="material-symbols-rounded">settings_ethernet</span>
-                </div>
-                <div class="config-form">
-                  <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-bottom: 15px;">
-                    <div class="input-group" style="margin-bottom: 0;">
-                      <label for="input-sheet-url">URL de Google Apps Script Web App</label>
-                      <div class="input-wrapper">
-                        <span class="material-symbols-rounded input-icon">link</span>
-                        <input type="url" id="input-sheet-url" placeholder="https://script.google.com/macros/s/.../exec">
-                      </div>
-                    </div>
-                    <div class="input-group" style="margin-bottom: 0;">
-                      <label for="input-tardiness-tolerance">Tolerancia Tardanza (min)</label>
-                      <div class="input-wrapper">
-                        <span class="material-symbols-rounded input-icon">schedule</span>
-                        <input type="number" id="input-tardiness-tolerance" value="5" min="0" max="60" required>
-                      </div>
-                    </div>
-                  </div>
-                  <button id="btn-save-config" class="btn-primary w-full">
-                    <span>Guardar Configuración</span>
-                    <span class="material-symbols-rounded">save</span>
-                  </button>
-                  <div class="test-connection-section">
-                    <button id="btn-test-connection" class="btn-outline w-full" disabled>
-                      <span>Probar Conexión con Sheet</span>
-                      <span class="material-symbols-rounded">sync_alt</span>
-                    </button>
-                    <div id="test-connection-result" class="test-result-msg"></div>
-                  </div>
                 </div>
               </div>
-            </div>
 
+              <button type="submit" class="btn-primary w-full" style="margin-top: 25px;">
+                <span>Registrar en Sistema</span>
+                <span class="material-symbols-rounded">person_add</span>
+              </button>
+            </form>
           </div>
 
           <!-- Panel de Justificaciones y Feriados Personalizados (Fase 3) -->
@@ -743,6 +701,43 @@
             </div>
 
           </div>
+
+          <!-- Integración con Google Sheets (Bajo uso - Movido abajo) -->
+          <div class="card-inner" style="margin-top: 25px;">
+            <div class="inner-header">
+              <h3>Integración con Google Sheets</h3>
+              <span class="material-symbols-rounded">settings_ethernet</span>
+            </div>
+            <div class="config-form">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                <div class="input-group" style="margin-bottom: 0;">
+                  <label for="input-sheet-url">URL de Google Apps Script Web App</label>
+                  <div class="input-wrapper">
+                    <span class="material-symbols-rounded input-icon">link</span>
+                    <input type="url" id="input-sheet-url" placeholder="https://script.google.com/macros/s/.../exec">
+                  </div>
+                </div>
+                <div class="input-group" style="margin-bottom: 0;">
+                  <label for="input-tardiness-tolerance">Tolerancia Tardanza (min)</label>
+                  <div class="input-wrapper">
+                    <span class="material-symbols-rounded input-icon">schedule</span>
+                    <input type="number" id="input-tardiness-tolerance" value="5" min="0" max="60" required>
+                  </div>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <button id="btn-save-config" class="btn-primary w-full">
+                  <span>Guardar Configuración</span>
+                  <span class="material-symbols-rounded">save</span>
+                </button>
+                <button id="btn-test-connection" class="btn-outline w-full" disabled>
+                  <span>Probar Conexión con Sheet</span>
+                  <span class="material-symbols-rounded">sync_alt</span>
+                </button>
+              </div>
+              <div id="test-connection-result" class="test-result-msg" style="margin-top: 10px; text-align: center;"></div>
+            </div>
+          </div>
         </div> <!-- Fin de #tab-register-content -->
 
         <!-- CONTENIDO PESTAÑA 2: REPORTES POR AGENTE -->
@@ -853,6 +848,8 @@
                   </tbody>
                 </table>
               </div>
+              
+
             </div>
           </div>
         </div> <!-- Fin de #tab-reports-content -->
@@ -860,6 +857,20 @@
         <!-- CONTENIDO PESTAÑA 3: RESUMEN GENERAL CONSOLIDADO -->
         <div id="tab-consolidated-content" class="admin-tab-content hidden">
           <div class="card-inner report-container">
+            <!-- Encabezado de Impresión Formal (Solo visible en PDF/Impresión) -->
+            <div class="print-header print-only" style="margin-bottom: 25px; border-bottom: 2.5px double #0f172a; padding-bottom: 15px; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 15px;">
+                <img src="icono.png" alt="Logo" style="width: 55px; height: 55px; object-fit: contain; border-radius: 50%; border: 2px solid #0f172a; padding: 2px; background: #fff;">
+                <div>
+                  <h1 style="font-family: var(--font-display); font-size: 1.7rem; font-weight: 800; color: #0f172a; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Resumen Consolidado de Asistencia</h1>
+                  <p style="font-size: 0.95rem; color: #475569; margin: 0; font-weight: 500;">
+                    Rango de Fechas: <span id="print-consolidated-range" style="font-weight: 700; color: #0f172a;"></span>
+                  </p>
+                </div>
+              </div>
+
+            </div>
+
             <div class="inner-header" style="margin-bottom: 15px;">
               <div class="report-title-section" style="display: flex; align-items: center; gap: 10px;">
                 <h3>Resumen Consolidado de Horas Trabajadas</h3>
@@ -891,6 +902,10 @@
                 <span class="material-symbols-rounded">download</span>
                 <span>Exportar Excel</span>
               </button>
+              <button id="btn-export-consolidated-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">print</span>
+                <span>Imprimir / PDF</span>
+              </button>
               <button id="btn-refresh-consolidated" class="btn-outline" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; height: 42px; border-radius: var(--radius-md); margin-left: auto;">
                 <span class="material-symbols-rounded" style="font-size: 18px;">sync</span>
                 <span>Actualizar Datos</span>
@@ -919,12 +934,28 @@
                 </tbody>
               </table>
             </div>
+
+
           </div>
         </div> <!-- Fin de #tab-consolidated-content -->
 
         <!-- CONTENIDO PESTAÑA 4: RESUMEN MENSUAL -->
         <div id="tab-monthly-content" class="admin-tab-content hidden">
           <div class="card-inner report-container">
+            <!-- Encabezado de Impresión Formal (Solo visible en PDF/Impresión) -->
+            <div class="print-header print-only" style="margin-bottom: 25px; border-bottom: 2.5px double #0f172a; padding-bottom: 15px; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 15px;">
+                <img src="icono.png" alt="Logo" style="width: 55px; height: 55px; object-fit: contain; border-radius: 50%; border: 2px solid #0f172a; padding: 2px; background: #fff;">
+                <div>
+                  <h1 style="font-family: var(--font-display); font-size: 1.7rem; font-weight: 800; color: #0f172a; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Resumen Mensual de Asistencia</h1>
+                  <p style="font-size: 0.95rem; color: #475569; margin: 0; font-weight: 500;">
+                    Mes de Reporte: <span id="print-monthly-selected" style="font-weight: 700; color: #0f172a;"></span>
+                  </p>
+                </div>
+              </div>
+
+            </div>
+
             <div class="inner-header" style="margin-bottom: 15px;">
               <div class="report-title-section" style="display: flex; align-items: center; gap: 10px;">
                 <h3>Resumen Mensual de Horas, Tardanzas y Faltas</h3>
@@ -948,6 +979,10 @@
               <button id="btn-export-monthly-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
                 <span class="material-symbols-rounded">download</span>
                 <span>Exportar Excel</span>
+              </button>
+              <button id="btn-export-monthly-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">print</span>
+                <span>Imprimir / PDF</span>
               </button>
             </div>
 
@@ -981,11 +1016,29 @@
                 </tbody>
               </table>
             </div>
+
+
           </div>
         </div>
       </section>
 
     </main>
+
+    <!-- CUSTOM CONFIRMATION MODAL -->
+    <div id="modal-confirm" class="modal-overlay hidden" style="display: none;">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 400px; width: 90%; text-align: center; padding: 25px;">
+        <div style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px auto;" id="confirm-modal-icon-container">
+          <span class="material-symbols-rounded" style="font-size: 32px;" id="confirm-modal-icon">warning</span>
+        </div>
+        <h3 id="confirm-modal-title" style="margin-bottom: 10px; font-size: 1.3rem; font-weight: 700; color: var(--text-primary);">¿Estás seguro?</h3>
+        <p id="confirm-modal-message" style="margin-bottom: 25px; font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary);"></p>
+        
+        <div class="modal-buttons" style="justify-content: center; width: 100%; gap: 12px; margin-top: 0;">
+          <button type="button" id="btn-confirm-cancel" class="btn-outline" style="flex: 1; padding: 10px 16px;">Cancelar</button>
+          <button type="button" id="btn-confirm-accept" class="btn-primary" style="flex: 1; padding: 10px 16px;">Aceptar</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ADMIN PASSWORD MODAL -->
     <div id="admin-auth-modal" class="modal-overlay hidden">

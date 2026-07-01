@@ -103,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupChangePinModal();
   setupWeeklyScheduleUIListeners();
   setupMonthlyReportUIListeners();
+  updatePrintTimestamp();
   syncInitialData();
 });
 
@@ -214,6 +215,7 @@ function loadLocalStorage() {
   if (toleranceInput) {
     toleranceInput.value = tardinessTolerance;
   }
+  autoClosePendingSessions();
 }
 
 function saveState() {
@@ -457,7 +459,7 @@ function updateDashboardStatusUI(action) {
       btnIngreso.disabled = true;
       btnBreakIn.disabled = true;
       btnBreakOut.disabled = false;
-      btnSalida.disabled = true;
+      btnSalida.disabled = false;
       break;
       
     case 'Fin Refrigerio':
@@ -591,6 +593,29 @@ function registerAttendanceAction(action) {
   const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const dateStr = now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
   
+  // ESCENARIO 1: Si marca Salida pero no cerró el break (Inicio Refrigerio)
+  if (action === 'Salida' && attendanceState[dni] && attendanceState[dni].action === 'Inicio Refrigerio') {
+    const preTime = new Date(now.getTime() - 1000);
+    const preTimeStr = preTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const preDateStr = preTime.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+    
+    const preLogItem = {
+      action: 'Fin Refrigerio',
+      timestamp: preTime.getTime(),
+      timeStr: preTimeStr,
+      dateStr: preDateStr,
+      details: 'Autocompletado por omisión'
+    };
+    
+    attendanceState[dni].action = 'Fin Refrigerio';
+    attendanceState[dni].timestamp = preTime.getTime();
+    attendanceState[dni].history.push(preLogItem);
+    
+    if (googleScriptUrl) {
+      sendAttendanceToGoogleSheets(dni, name, 'Fin Refrigerio', preTime);
+    }
+  }
+
   const logItem = {
     action: action,
     timestamp: now.getTime(),
@@ -902,6 +927,7 @@ function syncInitialData() {
           });
         }
         
+        autoClosePendingSessions();
         saveState();
         updateAdminView();
         updateReportEmployeeSelect();
@@ -1123,6 +1149,15 @@ function setupEventListeners() {
         showToast('warning', 'Selecciona colaborador', 'Primero debes elegir un colaborador para imprimir su reporte.');
         return;
       }
+      updatePrintTimestamp();
+      window.print();
+    });
+  }
+
+  const btnExportConsolidatedPdf = document.getElementById('btn-export-consolidated-pdf');
+  if (btnExportConsolidatedPdf) {
+    btnExportConsolidatedPdf.addEventListener('click', () => {
+      updatePrintTimestamp();
       window.print();
     });
   }
@@ -1130,6 +1165,19 @@ function setupEventListeners() {
   const btnExportConsolidatedExcel = document.getElementById('btn-export-consolidated-excel');
   if (btnExportConsolidatedExcel) {
     btnExportConsolidatedExcel.addEventListener('click', exportConsolidatedExcel);
+  }
+
+  const btnExportMonthlyPdf = document.getElementById('btn-export-monthly-pdf');
+  if (btnExportMonthlyPdf) {
+    btnExportMonthlyPdf.addEventListener('click', () => {
+      const monthInput = document.getElementById('monthly-select-month');
+      if (!monthInput || !monthInput.value) {
+        showToast('warning', 'Selecciona mes', 'Primero debes procesar un mes para imprimir su reporte.');
+        return;
+      }
+      updatePrintTimestamp();
+      window.print();
+    });
   }
 
   // Refresh URL input every time admin view is shown
@@ -1323,7 +1371,7 @@ function setupEventListeners() {
 }
 
 // Post attendance payload to Google Apps Script Web App
-function sendAttendanceToGoogleSheets(dni, name, action) {
+function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null) {
   showToast('warning', 'Sincronizando...', 'Enviando marca de asistencia a Google Sheets.');
   
   const payload = {
@@ -1332,6 +1380,13 @@ function sendAttendanceToGoogleSheets(dni, name, action) {
     employeeName: name,
     details: "Registrado vía AsistenciaPro Web"
   };
+
+  if (customTimeObj) {
+    payload.customDate = customTimeObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+    payload.customTime = customTimeObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    payload.customTimestamp = customTimeObj.getTime();
+    payload.details = "Autocompletado por omisión";
+  }
   
   // We use cors mode 'no-cors' if standard post fails, but standard JSON payload requires standard fetch.
   // Since Google Apps Script redirects with a 302, standard fetch needs simple redirect handling (which fetch handles automatically).
@@ -1526,40 +1581,46 @@ function updateAdminView() {
   updateReportEmployeeSelect();
 }
 
-// Global scope helper for admin panel action (so it can be clicked inside table row)
 window.forceLogoutEmployee = function(dni) {
-  if (confirm(`¿Estás seguro de que deseas forzar la salida de ${employeesDatabase[dni].name}?`)) {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const dateStr = now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
-    
-    const logItem = {
-      action: 'Salida',
-      timestamp: now.getTime(),
-      timeStr: timeStr,
-      dateStr: dateStr,
-      details: "Forzado por Administrador"
-    };
-    
-    attendanceState[dni].action = 'Salida';
-    attendanceState[dni].timestamp = now.getTime();
-    attendanceState[dni].history.push(logItem);
-    saveState();
-    
-    if (googleScriptUrl) {
-      sendAttendanceToGoogleSheets(dni, employeesDatabase[dni].name, 'Salida');
+  showCustomConfirm({
+    title: 'Forzar Salida',
+    message: `¿Estás seguro de que deseas forzar la salida de <strong>${employeesDatabase[dni].name}</strong>?<br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción registrará la salida del colaborador de forma inmediata.</span>`,
+    type: 'warning',
+    acceptText: 'Forzar Salida'
+  }).then((confirmed) => {
+    if (confirmed) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const dateStr = now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+      
+      const logItem = {
+        action: 'Salida',
+        timestamp: now.getTime(),
+        timeStr: timeStr,
+        dateStr: dateStr,
+        details: "Forzado por Administrador"
+      };
+      
+      attendanceState[dni].action = 'Salida';
+      attendanceState[dni].timestamp = now.getTime();
+      attendanceState[dni].history.push(logItem);
+      saveState();
+      
+      if (googleScriptUrl) {
+        sendAttendanceToGoogleSheets(dni, employeesDatabase[dni].name, 'Salida');
+      }
+      
+      // CORREGIDO: MOCK_EMPLOYEES cambiado a employeesDatabase
+      showToast('warning', 'Salida Forzada', `Se forzó la salida de ${employeesDatabase[dni].name}`);
+      updateAdminView();
+      
+      // If the active session is the forced logout, log out immediately
+      if (currentSession && currentSession.dni === dni) {
+        currentSession = null;
+        showView('login');
+      }
     }
-    
-    // CORREGIDO: MOCK_EMPLOYEES cambiado a employeesDatabase
-    showToast('warning', 'Salida Forzada', `Se forzó la salida de ${employeesDatabase[dni].name}`);
-    updateAdminView();
-    
-    // If the active session is the forced logout, log out immediately
-    if (currentSession && currentSession.dni === dni) {
-      currentSession = null;
-      showView('login');
-    }
-  }
+  });
 };
 
 /* ==========================================================================
@@ -1647,35 +1708,174 @@ function showToast(type, title, message) {
   }, 4000);
 }
 
+function showCustomConfirm(options) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('modal-confirm');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const msgEl = document.getElementById('confirm-modal-message');
+    const iconEl = document.getElementById('confirm-modal-icon');
+    const iconContainer = document.getElementById('confirm-modal-icon-container');
+    const btnAccept = document.getElementById('btn-confirm-accept');
+    const btnCancel = document.getElementById('btn-confirm-cancel');
+    
+    if (!modal) {
+      resolve(confirm(options.message.replace(/<[^>]*>/g, '')));
+      return;
+    }
+    
+    titleEl.textContent = options.title || '¿Estás seguro?';
+    msgEl.innerHTML = options.message || '';
+    
+    if (options.type === 'danger') {
+      iconContainer.style.background = 'rgba(239, 68, 68, 0.1)';
+      iconContainer.style.border = '2px solid #ef4444';
+      iconEl.style.color = '#ef4444';
+      iconEl.textContent = 'delete_forever';
+      btnAccept.style.background = '#ef4444';
+      btnAccept.style.borderColor = '#ef4444';
+      btnAccept.style.color = '#ffffff';
+      btnAccept.textContent = options.acceptText || 'Eliminar';
+    } else {
+      iconContainer.style.background = 'rgba(245, 158, 11, 0.1)';
+      iconContainer.style.border = '2px solid #f59e0b';
+      iconEl.style.color = '#f59e0b';
+      iconEl.textContent = 'warning';
+      btnAccept.style.background = '#f59e0b';
+      btnAccept.style.borderColor = '#f59e0b';
+      btnAccept.style.color = '#ffffff';
+      btnAccept.textContent = options.acceptText || 'Aceptar';
+    }
+    
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    
+    const cleanup = () => {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+      btnAccept.replaceWith(btnAccept.cloneNode(true));
+      btnCancel.replaceWith(btnCancel.cloneNode(true));
+    };
+    
+    document.getElementById('btn-confirm-accept').addEventListener('click', () => {
+      cleanup();
+      resolve(true);
+    });
+    
+    document.getElementById('btn-confirm-cancel').addEventListener('click', () => {
+      cleanup();
+      resolve(false);
+    });
+  });
+}
+
+function updatePrintTimestamp() {
+  const spans = document.querySelectorAll('.print-timestamp-span');
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  spans.forEach(s => s.textContent = dateStr);
+}
+
+function autoClosePendingSessions() {
+  let stateChanged = false;
+  const today = new Date();
+  const todayStr = today.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+  const normToday = normalizeDateStr(todayStr);
+
+  Object.keys(attendanceState).forEach(dni => {
+    const state = attendanceState[dni];
+    if (!state || !state.history || state.history.length === 0) return;
+
+    // Ordenar historial para encontrar la marca más reciente
+    state.history.sort((a, b) => a.timestamp - b.timestamp);
+    const lastLog = state.history[state.history.length - 1];
+
+    if (lastLog.action !== 'Salida' && normalizeDateStr(lastLog.dateStr) !== normToday) {
+      // Sesión de un día anterior dejada abierta. Auto-completar su salida a las 23:59:59.
+      const dateParts = lastLog.dateStr.split('/');
+      if (dateParts.length === 3) {
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const year = parseInt(dateParts[2], 10);
+
+        // Caso 1: Si se quedó en 'Inicio Refrigerio', cerrar refrigerio antes
+        if (lastLog.action === 'Inicio Refrigerio') {
+          const breakTime = new Date(year, month, day, 23, 59, 58);
+          const breakLog = {
+            action: 'Fin Refrigerio',
+            timestamp: breakTime.getTime(),
+            timeStr: '23:59:58',
+            dateStr: lastLog.dateStr,
+            details: 'Autocompletado a las 11:59:58pm'
+          };
+          state.history.push(breakLog);
+          if (googleScriptUrl) {
+            sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Fin Refrigerio', breakTime);
+          }
+        }
+
+        // Caso 2 & 3: Cerrar jornada a las 23:59:59
+        const exitTime = new Date(year, month, day, 23, 59, 59);
+        const exitLog = {
+          action: 'Salida',
+          timestamp: exitTime.getTime(),
+          timeStr: '23:59:59',
+          dateStr: lastLog.dateStr,
+          details: 'Autocompletado a las 11:59:59pm'
+        };
+        state.history.push(exitLog);
+        state.action = 'Salida';
+        state.timestamp = exitTime.getTime();
+
+        if (googleScriptUrl) {
+          sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Salida', exitTime);
+        }
+
+        stateChanged = true;
+      }
+    }
+  });
+
+  if (stateChanged) {
+    saveState();
+  }
+}
+
 // Lógica para ELIMINAR a un empleado del sistema (Movida fuera de showToast)
 window.deleteEmployee = function(dni) {
   const empName = employeesDatabase[dni].name;
   
-  if (confirm(`⚠️ ¿Estás seguro de que deseas ELIMINAR a ${empName} del sistema?\nYa no podrá iniciar sesión.`)) {
-    // 1. Borrar de la base de datos local
-    delete employeesDatabase[dni];
-    delete attendanceState[dni];
-    saveState();
-    
-    // 2. Actualizar la vista del administrador
-    updateAdminView();
-    showToast('success', 'Personal Eliminado', `${empName} fue retirado del sistema.`);
-    
-    // 3. Enviar orden a Google Sheets para borrarlo de la pestaña "Personal"
-    if (googleScriptUrl) {
-      const payload = {
-        action: "Eliminar_Personal",
-        employeeId: dni
-      };
+  showCustomConfirm({
+    title: 'Eliminar Colaborador',
+    message: `⚠️ ¿Estás seguro de que deseas ELIMINAR a <strong>${empName}</strong> del sistema?<br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción no se puede deshacer y el colaborador ya no podrá registrar asistencia.</span>`,
+    type: 'danger',
+    acceptText: 'Eliminar'
+  }).then((confirmed) => {
+    if (confirmed) {
+      // 1. Borrar de la base de datos local
+      delete employeesDatabase[dni];
+      delete attendanceState[dni];
+      saveState();
       
-      fetch(googleScriptUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // 2. Actualizar la vista del administrador
+      updateAdminView();
+      showToast('success', 'Personal Eliminado', `${empName} fue retirado del sistema.`);
+      
+      // 3. Enviar orden a Google Sheets para borrarlo de la pestaña "Personal"
+      if (googleScriptUrl) {
+        const payload = {
+          action: "Eliminar_Personal",
+          employeeId: dni
+        };
+        
+        fetch(googleScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
     }
-  }
+  });
 };
 
 /* ==========================================================================
@@ -2649,6 +2849,13 @@ function loadConsolidatedReport() {
   const tbody = document.getElementById('admin-consolidated-table-body');
   if (!tbody) return;
   
+  const printRange = document.getElementById('print-consolidated-range');
+  if (printRange) {
+    const startDate = document.getElementById('consolidated-start-date')?.value || 'Inicio';
+    const endDate = document.getElementById('consolidated-end-date')?.value || 'Fin';
+    printRange.textContent = `${startDate} al ${endDate}`;
+  }
+
   cachedConsolidatedHistory = getAllCachedHistory();
   renderConsolidatedTable(cachedConsolidatedHistory);
 }
@@ -3282,6 +3489,11 @@ function loadMonthlyReport() {
     tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 25px;">Por favor selecciona un mes válido.</td></tr>';
     return;
   }
+
+  const printMonth = document.getElementById('print-monthly-selected');
+  if (printMonth) {
+    printMonth.textContent = monthInput.value;
+  }
   
   const history = getAllCachedHistory();
   renderMonthlyTable(history);
@@ -3881,35 +4093,44 @@ function registerJustificacion(dni, dateStr, type, details) {
 }
 
 function deleteJustificacion(dni, dateStr) {
-  const payload = {
-    action: "Eliminar_Justificacion",
-    employeeId: dni,
-    date: dateStr
-  };
+  showCustomConfirm({
+    title: 'Eliminar Justificación',
+    message: `¿Estás seguro de que deseas eliminar la justificación de la fecha <strong>${dateStr}</strong>?<br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción no se puede deshacer.</span>`,
+    type: 'danger',
+    acceptText: 'Eliminar'
+  }).then((confirmed) => {
+    if (confirmed) {
+      const payload = {
+        action: "Eliminar_Justificacion",
+        employeeId: dni,
+        date: dateStr
+      };
 
-  justificacionesDatabase = justificacionesDatabase.filter(j => !(j.dni === dni && j.dateStr === dateStr));
-  localStorage.setItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
-  renderJustificacionesTable();
+      justificacionesDatabase = justificacionesDatabase.filter(j => !(j.dni === dni && j.dateStr === dateStr));
+      localStorage.setItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
+      renderJustificacionesTable();
 
-  if (googleScriptUrl) {
-    showToast('info', 'Eliminando...', 'Sincronizando eliminación con Google Sheets.');
-    fetch(googleScriptUrl, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-    .then(() => {
-      showToast('success', 'Eliminado', 'Justificación eliminada de Google Sheets.');
-      syncJustificacionesFromGoogleSheets();
-    })
-    .catch(err => {
-      console.error("Error al eliminar justificación:", err);
-      showToast('warning', 'Error de red', 'Eliminado localmente, falló sincronización.');
-    });
-  } else {
-    showToast('success', 'Eliminado', 'Justificación eliminada localmente.');
-  }
+      if (googleScriptUrl) {
+        showToast('info', 'Eliminando...', 'Sincronizando eliminación con Google Sheets.');
+        fetch(googleScriptUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+        .then(() => {
+          showToast('success', 'Eliminado', 'Justificación eliminada de Google Sheets.');
+          syncJustificacionesFromGoogleSheets();
+        })
+        .catch(err => {
+          console.error("Error al eliminar justificación:", err);
+          showToast('warning', 'Error de red', 'Eliminado localmente, falló sincronización.');
+        });
+      } else {
+        showToast('success', 'Eliminado', 'Justificación eliminada localmente.');
+      }
+    }
+  });
 }
 
 function registerFeriado(dateStr, name) {
@@ -3970,34 +4191,43 @@ function registerFeriado(dateStr, name) {
 }
 
 function deleteFeriado(dateStr) {
-  const payload = {
-    action: "Eliminar_Feriado",
-    date: dateStr
-  };
+  showCustomConfirm({
+    title: 'Eliminar Feriado',
+    message: `¿Estás seguro de que deseas eliminar el feriado de la fecha <strong>${dateStr}</strong>?<br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción no se puede deshacer.</span>`,
+    type: 'danger',
+    acceptText: 'Eliminar'
+  }).then((confirmed) => {
+    if (confirmed) {
+      const payload = {
+        action: "Eliminar_Feriado",
+        date: dateStr
+      };
 
-  feriadosDatabase = feriadosDatabase.filter(f => f.dateStr !== dateStr);
-  localStorage.setItem('feriados_db', JSON.stringify(feriadosDatabase));
-  renderFeriadosTable();
+      feriadosDatabase = feriadosDatabase.filter(f => f.dateStr !== dateStr);
+      localStorage.setItem('feriados_db', JSON.stringify(feriadosDatabase));
+      renderFeriadosTable();
 
-  if (googleScriptUrl) {
-    showToast('info', 'Eliminando...', 'Sincronizando eliminación con Google Sheets.');
-    fetch(googleScriptUrl, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-    .then(() => {
-      showToast('success', 'Eliminado', 'Feriado eliminado de Google Sheets.');
-      syncFeriadosFromGoogleSheets();
-    })
-    .catch(err => {
-      console.error("Error al eliminar feriado:", err);
-      showToast('warning', 'Error de red', 'Eliminado localmente, falló sincronización.');
-    });
-  } else {
-    showToast('success', 'Eliminado', 'Feriado eliminado localmente.');
-  }
+      if (googleScriptUrl) {
+        showToast('info', 'Eliminando...', 'Sincronizando eliminación con Google Sheets.');
+        fetch(googleScriptUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+        .then(() => {
+          showToast('success', 'Eliminado', 'Feriado eliminado de Google Sheets.');
+          syncFeriadosFromGoogleSheets();
+        })
+        .catch(err => {
+          console.error("Error al eliminar feriado:", err);
+          showToast('warning', 'Error de red', 'Eliminado localmente, falló sincronización.');
+        });
+      } else {
+        showToast('success', 'Eliminado', 'Feriado eliminado localmente.');
+      }
+    }
+  });
 }
 
 function getCurrentWeekDates() {
