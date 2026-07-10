@@ -604,7 +604,8 @@ function registerAttendanceAction(action) {
       timestamp: preTime.getTime(),
       timeStr: preTimeStr,
       dateStr: preDateStr,
-      details: 'Autocompletado por omisión'
+      details: 'Autocompletado por omisión',
+      device: 'Sistema'
     };
     
     attendanceState[dni].action = 'Fin Refrigerio';
@@ -620,7 +621,8 @@ function registerAttendanceAction(action) {
     action: action,
     timestamp: now.getTime(),
     timeStr: timeStr,
-    dateStr: dateStr
+    dateStr: dateStr,
+    device: obtenerDispositivo()
   };
   
   // 1. Update State Locally
@@ -1378,7 +1380,8 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null) {
     action: action,
     employeeId: dni,
     employeeName: name,
-    details: "Registrado vía AsistenciaPro Web"
+    details: "Registrado vía AsistenciaPro Web",
+    device: obtenerDispositivo()
   };
 
   if (customTimeObj) {
@@ -1386,6 +1389,7 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null) {
     payload.customTime = customTimeObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     payload.customTimestamp = customTimeObj.getTime();
     payload.details = "Autocompletado por omisión";
+    payload.device = "Sistema";
   }
   
   // We use cors mode 'no-cors' if standard post fails, but standard JSON payload requires standard fetch.
@@ -1500,6 +1504,8 @@ function updateAdminView() {
     }
     
     const lastMarkTime = state.timestamp ? new Date(state.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '---';
+    const lastTodayMark = todayMarks.length > 0 ? todayMarks[todayMarks.length - 1] : null;
+    const deviceDisplay = lastTodayMark && lastTodayMark.device ? lastTodayMark.device : '---';
     
     // Status Badge classes
     let statusClass = 'Desconectado';
@@ -1520,6 +1526,7 @@ function updateAdminView() {
         </span>
       </td>
       <td class="table-timestamp">${lastMarkTime}</td>
+      <td>${getDeviceIconHTML(deviceDisplay)}</td>
       <td>
         <div style="display: flex; gap: 8px; align-items: center; white-space: nowrap;">
           <button class="btn-table-action" onclick="forceLogoutEmployee('${dni}')" ${state.action === 'Desconectado' ? 'disabled' : ''} title="Forzar Salida" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
@@ -1768,6 +1775,66 @@ function showCustomConfirm(options) {
   });
 }
 
+/* ==========================================================================
+   DEVICE DETECTION UTILITIES
+   ========================================================================== */
+
+function obtenerDispositivo() {
+  const ua = navigator.userAgent;
+  if (/mobile/i.test(ua)) {
+    if (/ipad|tablet/i.test(ua)) {
+      return "Tablet";
+    }
+    return /iphone|ipad|ipod/i.test(ua) ? "Celular (iOS)" : "Celular (Android)";
+  }
+  if (/windows/i.test(ua)) return "PC (Windows)";
+  if (/macintosh/i.test(ua)) return "PC (macOS)";
+  if (/linux/i.test(ua)) return "PC (Linux)";
+  return "PC / Escritorio";
+}
+
+function getDeviceIconHTML(deviceStr) {
+  if (!deviceStr || deviceStr === '---') return '<span style="color: var(--text-muted)">---</span>';
+  
+  let iconName = "help";
+  let color = "var(--text-secondary)";
+  let title = deviceStr;
+  
+  const devLower = deviceStr.toLowerCase();
+  if (devLower.includes("celular") || devLower.includes("mobile") || devLower.includes("phone")) {
+    iconName = "smartphone";
+  } else if (devLower.includes("tablet") || devLower.includes("ipad")) {
+    iconName = "tablet_mac";
+  } else if (devLower.includes("pc") || devLower.includes("windows") || devLower.includes("macos") || devLower.includes("escritorio") || devLower.includes("desktop")) {
+    iconName = "desktop_windows";
+  } else if (devLower.includes("sistema") || devLower.includes("auto")) {
+    iconName = "settings";
+    color = "var(--text-muted)";
+  }
+  
+  return `<div style="display: inline-flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 18px; color: ${color};" title="${title}">${iconName}</span> <span style="font-size: 0.85rem;">${deviceStr}</span></div>`;
+}
+
+function getDeviceIconShortHTML(deviceStr) {
+  if (!deviceStr || deviceStr === '---') return '';
+  let iconName = "help";
+  let color = "var(--text-secondary)";
+  
+  const devLower = deviceStr.toLowerCase();
+  if (devLower.includes("celular") || devLower.includes("mobile") || devLower.includes("phone")) {
+    iconName = "smartphone";
+  } else if (devLower.includes("tablet") || devLower.includes("ipad")) {
+    iconName = "tablet_mac";
+  } else if (devLower.includes("pc") || devLower.includes("windows") || devLower.includes("macos") || devLower.includes("escritorio") || devLower.includes("desktop")) {
+    iconName = "desktop_windows";
+  } else if (devLower.includes("sistema") || devLower.includes("auto")) {
+    iconName = "settings";
+    color = "var(--text-muted)";
+  }
+  
+  return `<span class="material-symbols-rounded" style="vertical-align: middle; font-size: 15px; color: ${color}; margin-left: 4px;" title="${deviceStr}">${iconName}</span>`;
+}
+
 function updatePrintTimestamp() {
   const spans = document.querySelectorAll('.print-timestamp-span');
   const now = new Date();
@@ -1805,7 +1872,8 @@ function autoClosePendingSessions() {
             timestamp: breakTime.getTime(),
             timeStr: '23:59:58',
             dateStr: lastLog.dateStr,
-            details: 'Autocompletado a las 11:59:58pm'
+            details: 'Autocompletado a las 11:59:58pm',
+            device: 'Sistema'
           };
           state.history.push(breakLog);
           if (googleScriptUrl) {
@@ -1820,7 +1888,8 @@ function autoClosePendingSessions() {
           timestamp: exitTime.getTime(),
           timeStr: '23:59:59',
           dateStr: lastLog.dateStr,
-          details: 'Autocompletado a las 11:59:59pm'
+          details: 'Autocompletado a las 11:59:59pm',
+          device: 'Sistema'
         };
         state.history.push(exitLog);
         state.action = 'Salida';
@@ -2241,7 +2310,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     totalElapsedSeconds = Math.floor((lastMark.timestamp - ingresoMark.timestamp) / 1000);
   }
 
-  const workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
+  let workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
 
   // Expectativas teóricas
   const expectedStart = timeStrToSeconds(daySched.workStart || "08:00");
@@ -2252,6 +2321,33 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   const expectedWorkSeconds = isRestDayOrHolidayOrJustified ? 0 : Math.max(0, (daySched.expectedHours || 8) * 3600);
   const expectedBreakSeconds = isRestDayOrHolidayOrJustified || daySched.nobreak ? 0 : Math.max(0, totalShiftSeconds - expectedWorkSeconds);
 
+  // Detectar si la salida fue autocompletada por omisión
+  const isAutoClose = salidaMark && (
+    (salidaMark.details && (
+      salidaMark.details.includes('Autocompletado') || 
+      salidaMark.details.includes('Autocompletado por omisión') ||
+      salidaMark.details.includes('Cierre automático')
+    )) || 
+    salidaMark.timeStr === '23:59:59' ||
+    salidaMark.timeStr === '23:59:58'
+  );
+
+  if (isAutoClose) {
+    if (isRestDayOrHolidayOrJustified) {
+      workedSeconds = 0;
+    } else {
+      // Simular salida teórica para penalizar tardanzas pero no generar horas extras
+      const actualEntrySecs = timeStrToSeconds(entradaReal);
+      const calcStartSecs = Math.max(actualEntrySecs, expectedStart);
+      const calculatedElapsed = Math.max(0, expectedEnd - calcStartSecs);
+      
+      workedSeconds = Math.max(0, calculatedElapsed - breakSeconds);
+      if (workedSeconds > expectedWorkSeconds) {
+        workedSeconds = expectedWorkSeconds;
+      }
+    }
+  }
+
   let diffSeconds = 0;
   let diffClass = 'diff-neutral';
   let status = '---';
@@ -2259,9 +2355,14 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   if (isRestDayOrHolidayOrJustified) {
     // En día de descanso, feriado o justificado, todas las horas trabajadas son a favor (horas extra)
     if (salidaMark) {
-      diffSeconds = workedSeconds;
-      status = `+${formatSecondsToHHMMSS(diffSeconds)}`;
-      diffClass = 'diff-positive';
+      diffSeconds = isAutoClose ? 0 : workedSeconds;
+      if (diffSeconds > 0) {
+        status = `+${formatSecondsToHHMMSS(diffSeconds)}`;
+        diffClass = 'diff-positive';
+      } else {
+        status = '00:00:00';
+        diffClass = 'diff-neutral';
+      }
     } else {
       status = '--';
       diffClass = 'diff-neutral';
@@ -2270,6 +2371,10 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     // Día laboral normal
     if (salidaMark) {
       diffSeconds = workedSeconds - expectedWorkSeconds;
+      if (isAutoClose && diffSeconds > 0) {
+        diffSeconds = 0;
+      }
+      
       if (diffSeconds > 0) {
         status = `+${formatSecondsToHHMMSS(diffSeconds)}`;
         diffClass = 'diff-positive';
@@ -2300,7 +2405,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
 
   // Evaluar horas adicionales (overtime en día laborable normal)
   let horasAdicionalesSeconds = 0;
-  if (!isRestDayOrHolidayOrJustified && salidaMark) {
+  if (!isRestDayOrHolidayOrJustified && salidaMark && !isAutoClose) {
     const actualExitSeconds = timeStrToSeconds(salidaReal);
     const scheduledExitSeconds = timeStrToSeconds(daySched.workEnd || "17:00");
     if (actualExitSeconds > scheduledExitSeconds) {
@@ -2321,6 +2426,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   const excessBreakMinutes = Math.floor(excessBreakSeconds / 60);
   const diffMinutes = Math.floor(diffSeconds / 60);
 
+  const entradaDevice = ingresoMark && ingresoMark.device ? ingresoMark.device : '---';
+  const salidaDevice = salidaMark && salidaMark.device ? salidaMark.device : '---';
+
   return {
     entradaReal,
     breakReal,
@@ -2338,7 +2446,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     excessBreakMinutes,
     diffMinutes,
     hasExcessBreak,
-    excessBreakSeconds
+    excessBreakSeconds,
+    entradaDevice,
+    salidaDevice
   };
 }
 
@@ -2666,10 +2776,10 @@ function renderReportTable(history, employee) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="font-weight: 600;">${dateStr}</td>
-      <td class="table-timestamp text-center">${report.entradaReal}</td>
+      <td class="table-timestamp text-center" style="white-space: nowrap;">${report.entradaReal}${getDeviceIconShortHTML(report.entradaDevice)}</td>
       <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
       <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
-      <td class="table-timestamp text-center">${report.salidaReal}</td>
+      <td class="table-timestamp text-center" style="white-space: nowrap;">${report.salidaReal}${getDeviceIconShortHTML(report.salidaDevice)}</td>
       <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
       <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}${excessBreakBadge}</td>
       <td class="text-center" style="font-weight: 600; color: var(--text-primary); white-space: nowrap;">${report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00'}</td>
@@ -3229,12 +3339,15 @@ function exportAgentReportExcel() {
     const tardyStr = report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00';
     const extraHrsStr = report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00';
     
+    const entradaText = report.entradaDevice && report.entradaDevice !== '---' ? `${report.entradaReal} (${report.entradaDevice})` : report.entradaReal;
+    const salidaText = report.salidaDevice && report.salidaDevice !== '---' ? `${report.salidaReal} (${report.salidaDevice})` : report.salidaReal;
+    
     rows.push([
       dateStr,
-      report.entradaReal,
+      entradaText,
       tardyStr,
       report.breakReal,
-      report.salidaReal,
+      salidaText,
       extraHrsStr,
       breakStr,
       excessBreakMin,
