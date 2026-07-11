@@ -4,16 +4,16 @@
 
 // 1. Base de Datos Inicial (Datos por defecto si el LocalStorage está vacío)
 const DEFAULT_EMPLOYEES = {
-  "73507283": { name: "ESPINOZA DE LA CRUZ NORIA LOZANIA", role: "Operaciones", age: 30, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "73570425": { name: "BELTRAN ANAYA GUIERAL GERARDO", role: "Soporte Técnico", age: 25, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "70643869": { name: "RIOJAS OCHANTE JESUS LEONARDO", role: "Logística", age: 28, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "70920196": { name: "JADE ELISA VEGA VEGA", role: "Administración", age: 24, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "73828099": { name: "CESAR AUGUSTO DE LA CRUZ SOLANO", role: "Operaciones", age: 33, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "76209425": { name: "SUNI MONROY AMPARO SOLEDAD", role: "Atención al Cliente", age: 29, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "74835571": { name: "GONZALEZ RIVERA JUAN CARLOS", role: "Operaciones", age: 31, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "70625678": { name: "RAMIREZ DIAZ CARMEN JULIA", role: "Logística", age: 35, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "76241100": { name: "HUAMAN PALOMINO JOSE LUIS", role: "Soporte Técnico", age: 27, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  "76458278": { name: "HURTADO TORRES GHILBERT ROBERTO", role: "Soporte Técnico", age: 32, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" }
+  //"73507283": { name: "ESPINOZA DE LA CRUZ NORIA LOZANIA", role: "Operaciones", age: 30, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"73570425": { name: "BELTRAN ANAYA GUIERAL GERARDO", role: "Soporte Técnico", age: 25, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"70643869": { name: "RIOJAS OCHANTE JESUS LEONARDO", role: "Logística", age: 28, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"70920196": { name: "JADE ELISA VEGA VEGA", role: "Administración", age: 24, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"73828099": { name: "CESAR AUGUSTO DE LA CRUZ SOLANO", role: "Operaciones", age: 33, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"76209425": { name: "SUNI MONROY AMPARO SOLEDAD", role: "Atención al Cliente", age: 29, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"74835571": { name: "GONZALEZ RIVERA JUAN CARLOS", role: "Operaciones", age: 31, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"70625678": { name: "RAMIREZ DIAZ CARMEN JULIA", role: "Logística", age: 35, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"76241100": { name: "HUAMAN PALOMINO JOSE LUIS", role: "Soporte Técnico", age: 27, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
+  //"76458278": { name: "HURTADO TORRES GHILBERT ROBERTO", role: "Soporte Técnico", age: 32, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" }
 };
 
 // Variable global dinámica que reemplaza a MOCK_EMPLOYEES
