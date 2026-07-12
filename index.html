@@ -132,6 +132,15 @@
               </div>
               <div id="clock-date" class="clock-date">Cargando fecha...</div>
               
+              <!-- Mensaje de Guía Dinámico (Paso 4) -->
+              <p id="agent-guide-message" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; margin-top: 8px; text-align: center; max-width: 280px; margin-left: auto; margin-right: auto; line-height: 1.4;"></p>
+              
+              <!-- Información de Horario de Hoy (Paso 2) -->
+              <div id="agent-today-schedule-info" style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-bottom: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <span class="material-symbols-rounded" style="font-size: 14px; color: var(--color-blue);">info</span>
+                <span id="agent-today-schedule-text">Cargando horario...</span>
+              </div>
+
               <div class="status-card-inner">
                 <p>Tu estado actual:</p>
                 <div class="status-badge-container">
@@ -179,9 +188,15 @@
           <!-- Columna Derecha: Historial Personal Reciente -->
           <div class="dashboard-col">
             <div class="card-inner">
-              <div class="inner-header">
-                <h3>Mis Marcas Recientes (Hoy)</h3>
-                <span class="material-symbols-rounded text-gradient">history</span>
+              <div class="inner-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <h3>Mis Marcas Recientes (Hoy)</h3>
+                  <span class="material-symbols-rounded text-gradient">history</span>
+                </div>
+                <button type="button" id="btn-open-agent-history" class="btn-outline" style="padding: 6px 12px; height: auto; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);">
+                  <span class="material-symbols-rounded" style="font-size: 15px;">calendar_today</span>
+                  <span>Ver Récord Mensual</span>
+                </button>
               </div>
               <div class="log-container">
                 <ul id="personal-log-list" class="log-list">
@@ -273,6 +288,10 @@
           <button class="btn-admin-tab" data-tab="monthly">
             <span class="material-symbols-rounded">calendar_month</span>
             <span>Resumen Mensual</span>
+          </button>
+          <button class="btn-admin-tab" data-tab="daily">
+            <span class="material-symbols-rounded">calendar_today</span>
+            <span>Resumen Diario</span>
           </button>
         </div>
 
@@ -376,6 +395,82 @@
           </div>
         </div> <!-- Fin de #tab-live-content -->
 
+        <!-- CONTENIDO PESTAÑA: RESUMEN DIARIO -->
+        <div id="tab-daily-content" class="admin-tab-content hidden">
+          <div class="card-inner report-container">
+            <!-- Encabezado de Impresión Formal (PDF) -->
+            <div class="print-header print-only" style="margin-bottom: 25px; border-bottom: 2.5px double #0f172a; padding-bottom: 15px; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 15px;">
+                <img src="icono.png" alt="Logo" style="width: 55px; height: 55px; object-fit: contain; border-radius: 50%; border: 2px solid #0f172a; padding: 2px; background: #fff;">
+                <div>
+                  <h1 style="font-family: var(--font-display); font-size: 1.7rem; font-weight: 800; color: #0f172a; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">Resumen Diario de Asistencia</h1>
+                  <p style="font-size: 0.95rem; color: #475569; margin: 0; font-weight: 500;">
+                    Fecha del Reporte: <span id="print-daily-selected" style="font-weight: 700; color: #0f172a;"></span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="inner-header" style="margin-bottom: 15px;">
+              <div class="report-title-section" style="display: flex; align-items: center; gap: 10px;">
+                <h3>Resumen Diario de Asistencia General</h3>
+                <span class="material-symbols-rounded text-gradient">calendar_today</span>
+              </div>
+            </div>
+
+            <!-- Filtros de fecha diario -->
+            <div class="daily-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+              <div class="input-group" style="margin-bottom: 0; width: 200px;">
+                <label for="daily-select-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Seleccionar Fecha</label>
+                <div class="input-wrapper" style="position: relative;">
+                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
+                  <input type="date" id="daily-select-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
+                </div>
+              </div>
+              <button id="btn-filter-daily" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">filter_list</span>
+                <span>Procesar</span>
+              </button>
+              <button id="btn-export-daily-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">download</span>
+                <span>Exportar Excel</span>
+              </button>
+              <button id="btn-export-daily-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
+                <span class="material-symbols-rounded">print</span>
+                <span>Imprimir / PDF</span>
+              </button>
+            </div>
+
+            <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5;">
+              Este cuadro resume la asistencia de todo el personal en el día seleccionado, detallando las horas reales de entrada/salida, break, trabajo real, tardanzas e incidencias.
+            </p>
+
+            <div class="table-responsive">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>DNI</th>
+                    <th class="text-center">Entrada</th>
+                    <th class="text-center">Salida</th>
+                    <th class="text-center">Refrigerio</th>
+                    <th class="text-center">Trabajo Real</th>
+                    <th class="text-center">Tardanza</th>
+                    <th class="text-center">Estado / Incidencia</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-daily-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center text-muted" style="text-align: center; padding: 30px;">
+                      Cargando datos de asistencia...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div> <!-- Fin de #tab-daily-content -->
+
         <!-- CONTENIDO PESTAÑA 2: REGISTRAR COLABORADOR Y CONFIGURACIÓN -->
         <div id="tab-register-content" class="admin-tab-content hidden">
           <div class="card-inner" style="margin-bottom: 25px;">
@@ -437,112 +532,125 @@
 
                 <!-- Columna 2: Horarios de Trabajo -->
                 <div>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
-                    <div class="input-group" style="margin-bottom: 0;">
-                      <label for="reg-work-start">Entrada de Jornada</label>
-                      <div class="input-wrapper">
-                        <span class="material-symbols-rounded input-icon">login</span>
-                        <input type="time" id="reg-work-start" value="08:00" required>
-                      </div>
-                    </div>
-                    <div class="input-group" style="margin-bottom: 0;">
-                      <label for="reg-work-end">Salida de Jornada</label>
-                      <div class="input-wrapper">
-                        <span class="material-symbols-rounded input-icon">logout</span>
-                        <input type="time" id="reg-work-end" value="17:00" required>
-                      </div>
+                  <div class="input-group" style="margin-bottom: 15px;">
+                    <label for="reg-schedule-type">Tipo de Jornada</label>
+                    <div class="input-wrapper select-wrapper">
+                      <span class="material-symbols-rounded input-icon">tune</span>
+                      <select id="reg-schedule-type" style="width: 100%; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px 12px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 1rem; -webkit-appearance: none; outline:none; cursor: pointer;">
+                        <option value="fixed">Horario Fijo / Programado</option>
+                        <option value="flexible">Horario Flexible / Sin Horario</option>
+                      </select>
                     </div>
                   </div>
 
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
-                    <div class="input-group" style="margin-bottom: 0;">
-                      <label for="reg-break-start">Inicio de Break</label>
-                      <div class="input-wrapper">
-                        <span class="material-symbols-rounded input-icon">restaurant</span>
-                        <input type="time" id="reg-break-start" value="13:00" required>
+                  <div id="reg-schedule-details-container">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
+                      <div class="input-group" style="margin-bottom: 0;">
+                        <label for="reg-work-start">Entrada de Jornada</label>
+                        <div class="input-wrapper">
+                          <span class="material-symbols-rounded input-icon">login</span>
+                          <input type="time" id="reg-work-start" value="08:00" required>
+                        </div>
+                      </div>
+                      <div class="input-group" style="margin-bottom: 0;">
+                        <label for="reg-work-end">Salida de Jornada</label>
+                        <div class="input-wrapper">
+                          <span class="material-symbols-rounded input-icon">logout</span>
+                          <input type="time" id="reg-work-end" value="17:00" required>
+                        </div>
                       </div>
                     </div>
-                    <div class="input-group" style="margin-bottom: 0;">
-                      <label for="reg-break-end">Fin de Break</label>
-                      <div class="input-wrapper">
-                        <span class="material-symbols-rounded input-icon">restaurant_menu</span>
-                        <input type="time" id="reg-break-end" value="14:00" required>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div class="weekly-schedule-config-trigger" style="margin-top: 15px; margin-bottom: 10px;">
-                    <button type="button" id="btn-toggle-reg-weekly-schedule" class="btn-outline w-full" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px;">
-                      <span class="material-symbols-rounded">calendar_month</span>
-                      <span>Personalizar Horarios Semanales</span>
-                      <span class="material-symbols-rounded arrow-icon">keyboard_arrow_down</span>
-                    </button>
-                  </div>
-                  <div id="reg-weekly-schedule-fields" class="hidden" style="background: var(--surface-1); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 0; max-height: 250px; overflow-y: auto;">
-                    <div style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; font-weight: 600; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
-                      <span>Día</span>
-                      <span>Entrada</span>
-                      <span>Salida</span>
-                      <span>Hrs</span>
-                      <span class="text-center">Desc</span>
-                      <span class="text-center" title="Sin Break">S/B</span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
+                      <div class="input-group" style="margin-bottom: 0;">
+                        <label for="reg-break-start">Inicio de Break</label>
+                        <div class="input-wrapper">
+                          <span class="material-symbols-rounded input-icon">restaurant</span>
+                          <input type="time" id="reg-break-start" value="13:00" required>
+                        </div>
+                      </div>
+                      <div class="input-group" style="margin-bottom: 0;">
+                        <label for="reg-break-end">Fin de Break</label>
+                        <div class="input-wrapper">
+                          <span class="material-symbols-rounded input-icon">restaurant_menu</span>
+                          <input type="time" id="reg-break-end" value="14:00" required>
+                        </div>
+                      </div>
                     </div>
-                    <!-- Rows for Lunes (1) to Domingo (0) -->
-                    <div class="day-schedule-row" data-day="1" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 0.85rem; font-weight: 500;">Lunes</span>
-                      <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+
+                    <div class="weekly-schedule-config-trigger" style="margin-top: 15px; margin-bottom: 10px;">
+                      <button type="button" id="btn-toggle-reg-weekly-schedule" class="btn-outline w-full" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px;">
+                        <span class="material-symbols-rounded">calendar_month</span>
+                        <span>Personalizar Horarios Semanales</span>
+                        <span class="material-symbols-rounded arrow-icon">keyboard_arrow_down</span>
+                      </button>
                     </div>
-                    <div class="day-schedule-row" data-day="2" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 0.85rem; font-weight: 500;">Martes</span>
-                      <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                    </div>
-                    <div class="day-schedule-row" data-day="3" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 0.85rem; font-weight: 500;">Miércoles</span>
-                      <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                    </div>
-                    <div class="day-schedule-row" data-day="4" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 0.85rem; font-weight: 500;">Jueves</span>
-                      <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                    </div>
-                    <div class="day-schedule-row" data-day="5" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 0.85rem; font-weight: 500;">Viernes</span>
-                      <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                    </div>
-                    <div class="day-schedule-row" data-day="6" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
-                      <span style="font-size: 0.85rem; font-weight: 500;">Sábado</span>
-                      <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="13:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="4" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                    </div>
-                    <div class="day-schedule-row" data-day="0" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center;">
-                      <span style="font-size: 0.85rem; font-weight: 500; color: var(--text-muted);">Domingo</span>
-                      <input type="time" class="reg-day-start" value="08:00" disabled style="opacity: 0.5; padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="time" class="reg-day-end" value="17:00" disabled style="opacity: 0.5; padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
-                      <input type="number" class="reg-day-hours" value="0" disabled style="opacity: 0.5; padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
-                      <input type="checkbox" class="reg-day-rest" checked style="transform: scale(1.1); justify-self: center; cursor: pointer;">
-                      <input type="checkbox" class="reg-day-nobreak" disabled style="opacity: 0.5; transform: scale(1.1); justify-self: center; cursor: pointer;">
+                    <div id="reg-weekly-schedule-fields" class="hidden" style="background: var(--surface-1); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 0; max-height: 250px; overflow-y: auto;">
+                      <div style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; font-weight: 600; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span>Día</span>
+                        <span>Entrada</span>
+                        <span>Salida</span>
+                        <span>Hrs</span>
+                        <span class="text-center">Desc</span>
+                        <span class="text-center" title="Sin Break">S/B</span>
+                      </div>
+                      <!-- Rows for Lunes (1) to Domingo (0) -->
+                      <div class="day-schedule-row" data-day="1" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 500;">Lunes</span>
+                        <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
+                      <div class="day-schedule-row" data-day="2" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 500;">Martes</span>
+                        <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
+                      <div class="day-schedule-row" data-day="3" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 500;">Miércoles</span>
+                        <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
+                      <div class="day-schedule-row" data-day="4" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 500;">Jueves</span>
+                        <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
+                      <div class="day-schedule-row" data-day="5" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 500;">Viernes</span>
+                        <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="18:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="8" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
+                      <div class="day-schedule-row" data-day="6" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 500;">Sábado</span>
+                        <input type="time" class="reg-day-start" value="09:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="13:00" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="4" min="0" max="24" style="padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
+                      <div class="day-schedule-row" data-day="0" style="display: grid; grid-template-columns: 2fr 2.5fr 2.5fr 1.6fr 1.6fr 1.6fr; gap: 6px; align-items: center;">
+                        <span style="font-size: 0.85rem; font-weight: 500; color: var(--text-muted);">Domingo</span>
+                        <input type="time" class="reg-day-start" value="08:00" disabled style="opacity: 0.5; padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="time" class="reg-day-end" value="17:00" disabled style="opacity: 0.5; padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary);">
+                        <input type="number" class="reg-day-hours" value="0" disabled style="opacity: 0.5; padding: 4px; font-size: 0.85rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-inner); color: var(--text-primary); text-align: center;">
+                        <input type="checkbox" class="reg-day-rest" checked style="transform: scale(1.1); justify-self: center; cursor: pointer;">
+                        <input type="checkbox" class="reg-day-nobreak" disabled style="opacity: 0.5; transform: scale(1.1); justify-self: center; cursor: pointer;">
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -895,6 +1003,12 @@
                   <input type="date" id="consolidated-end-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
                 </div>
               </div>
+              <div class="quick-filters-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" id="btn-quick-week" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Esta Semana</button>
+                <button type="button" id="btn-quick-lastweek" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Semana Pasada</button>
+                <button type="button" id="btn-quick-month" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Este Mes</button>
+                <button type="button" id="btn-quick-30days" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Últimos 30 Días</button>
+              </div>
               <button id="btn-filter-consolidated" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
                 <span class="material-symbols-rounded">filter_list</span>
                 <span>Filtrar</span>
@@ -1068,7 +1182,7 @@
 
     <!-- EDIT EMPLOYEE MODAL -->
     <div id="modal-edit-employee" class="modal-overlay hidden">
-      <div class="modal card glassmorphism animate-scale-up" style="max-width: 500px; width: 90%;">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
         <div class="card-header text-center">
           <span class="material-symbols-rounded icon-hero text-gradient color-blue">edit_note</span>
           <h3>Editar Colaborador</h3>
@@ -1110,6 +1224,18 @@
             </div>
           </div>
 
+          <div class="input-group" style="margin-bottom: 15px;">
+            <label for="edit-schedule-type">Tipo de Jornada</label>
+            <div class="input-wrapper select-wrapper">
+              <span class="material-symbols-rounded input-icon">tune</span>
+              <select id="edit-schedule-type" style="width: 100%; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px 12px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 1rem; -webkit-appearance: none; outline:none; cursor: pointer;">
+                <option value="fixed">Horario Fijo / Programado</option>
+                <option value="flexible">Horario Flexible / Sin Horario</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="edit-schedule-details-container">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-bottom: 12px;">
             <div class="input-group" style="margin-bottom: 0;">
               <label for="edit-work-start">Entrada de Jornada</label>
@@ -1219,6 +1345,7 @@
               <input type="checkbox" class="edit-day-nobreak" disabled style="opacity: 0.5; transform: scale(1.1); justify-self: center; cursor: pointer;">
             </div>
           </div>
+          </div>
 
           <div class="modal-buttons">
             <button type="button" id="btn-edit-cancel" class="btn-outline">Cancelar</button>
@@ -1230,7 +1357,7 @@
 
     <!-- CHANGE PIN MODAL (FOR EMPLOYEES) -->
     <div id="modal-change-pin" class="modal-overlay hidden">
-      <div class="modal card glassmorphism animate-scale-up" style="max-width: 390px; width: 90%;">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 390px; width: 90%; max-height: 90vh; overflow-y: auto;">
         <div class="card-header text-center">
           <span class="material-symbols-rounded icon-hero text-gradient">lock_reset</span>
           <h3>Cambiar PIN de Seguridad</h3>
@@ -1264,6 +1391,44 @@
             <button type="submit" class="btn-primary">Guardar PIN</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- MODAL HISTORIAL COMPLETO DE AGENTE (MENSUAL) (Paso 1) -->
+    <div id="modal-agent-history" class="modal-overlay hidden">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: auto;">
+        <div class="card-header text-center" style="margin-bottom: 20px;">
+          <span class="material-symbols-rounded icon-hero text-gradient color-blue">calendar_month</span>
+          <h3>Mi Récord de Asistencia Mensual</h3>
+          <p>Consulta tus asistencias, horas trabajadas y tardanzas del mes seleccionado</p>
+          <div style="display: inline-flex; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 4px; margin-top: 12px; gap: 4px;">
+            <button type="button" id="btn-agent-history-current" class="btn-primary" style="padding: 6px 16px; font-size: 0.82rem; border-radius: 6px; height: auto;">Mes Actual</button>
+            <button type="button" id="btn-agent-history-previous" class="btn-outline" style="padding: 6px 16px; font-size: 0.82rem; border-radius: 6px; height: auto;">Mes Anterior</button>
+          </div>
+        </div>
+        
+        <div class="table-responsive" style="margin-bottom: 20px;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th class="text-center">Entrada</th>
+                <th class="text-center">Salida</th>
+                <th class="text-center">Refrigerio</th>
+                <th class="text-center">Trabajo Real</th>
+                <th class="text-center">Tardanza</th>
+                <th class="text-center">Estado / Incidencia</th>
+              </tr>
+            </thead>
+            <tbody id="agent-history-table-body">
+              <!-- Filas inyectadas por JS -->
+            </tbody>
+          </table>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" id="btn-agent-history-close" class="btn-primary" style="padding: 10px 24px;">Cerrar</button>
+        </div>
       </div>
     </div>
 

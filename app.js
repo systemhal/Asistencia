@@ -32,6 +32,7 @@ let cachedAgentHistory = [];
 let cachedConsolidatedHistory = []; 
 let justificacionesDatabase = [];
 let feriadosDatabase = []; 
+// Reverted overtimeDatabase, isMarkingCooldown and breakTimerInterval (Puntos 10, 15, 22)
 
 // ... (Las variables de DOM Elements se quedan exactamente igual) ...
 
@@ -101,8 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupAdminTabs();
   setupEditModalListeners();
   setupChangePinModal();
+  setupAgentHistoryListeners();
   setupWeeklyScheduleUIListeners();
   setupMonthlyReportUIListeners();
+  setupDailySummaryListeners();
   updatePrintTimestamp();
   syncInitialData();
 });
@@ -180,6 +183,8 @@ function loadLocalStorage() {
     feriadosDatabase = [];
   }
 
+  // Reverted overtime_db loading
+
   // Cargar estados de asistencia
   const savedState = localStorage.getItem('attendance_state');
   if (savedState) {
@@ -222,6 +227,8 @@ function saveState() {
   localStorage.setItem('attendance_state', JSON.stringify(attendanceState));
   localStorage.setItem('employees_db', JSON.stringify(employeesDatabase));
 }
+
+// Reverted saveOvertime
 
 /* ==========================================================================
    CLOCK LÓGICA (RELOJ EN TIEMPO REAL)
@@ -362,6 +369,7 @@ function setupDashboardView() {
   updateDashboardStatusUI(state.action);
   renderPersonalLogs();
   renderEmployeeWeeklySummary(currentSession.dni);
+  updateAgentGuideAndSchedule();
 
   // Sincronizar el historial del empleado desde la nube para el resumen semanal y logs
   if (googleScriptUrl) {
@@ -391,6 +399,7 @@ function setupDashboardView() {
           saveState();
           renderPersonalLogs();
           renderEmployeeWeeklySummary(currentSession.dni);
+          updateAgentGuideAndSchedule();
         }
       })
       .catch(err => {
@@ -437,7 +446,7 @@ function updateDashboardStatusUI(action) {
   // Remove existing color classes
   currentStatusText.className = 'status-text';
   statusDot.className = 'status-dot pulse';
-  
+
   // Add appropriate colors and manage buttons state
   switch(action) {
     case 'Ingreso':
@@ -642,7 +651,9 @@ function registerAttendanceAction(action) {
   updateDashboardStatusUI(action);
   renderPersonalLogs();
   renderEmployeeWeeklySummary(dni);
+  updateAgentGuideAndSchedule();
   updateAdminView();
+
 }
 // Enviar nuevo empleado a Google Sheets
 function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd, pin = "1234", weeklySchedule = "") {
@@ -738,10 +749,14 @@ function syncEmployeesFromGoogleSheets() {
           // Parsear weeklySchedule
           let parsedWeekly = null;
           if (emp.weeklySchedule) {
-            try {
-              parsedWeekly = typeof emp.weeklySchedule === 'string' ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule;
-            } catch (e) {
-              parsedWeekly = null;
+            if (emp.weeklySchedule === 'flexible') {
+              parsedWeekly = 'flexible';
+            } else {
+              try {
+                parsedWeekly = typeof emp.weeklySchedule === 'string' ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule;
+              } catch (e) {
+                parsedWeekly = null;
+              }
             }
           }
 
@@ -857,7 +872,15 @@ function syncInitialData() {
           employees.forEach(emp => {
             let parsedWeekly = null;
             if (emp.weeklySchedule) {
-              try { parsedWeekly = typeof emp.weeklySchedule === 'string' ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule; } catch(e) {}
+              if (emp.weeklySchedule === 'flexible') {
+                parsedWeekly = 'flexible';
+              } else {
+                try { 
+                  parsedWeekly = typeof emp.weeklySchedule === 'string' ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule; 
+                } catch(e) {
+                  parsedWeekly = null;
+                }
+              }
             }
             employeesDatabase[emp.dni] = {
               dni: emp.dni,
@@ -1033,6 +1056,58 @@ function setupEventListeners() {
   attendanceButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const action = btn.getAttribute('data-action');
+      const dni = currentSession ? currentSession.dni : null;
+      const employee = dni ? employeesDatabase[dni] : null;
+
+      // Restricción de Ingreso Anticipado (Máximo 5 minutos antes del turno programado)
+      if (action === 'Ingreso' && employee) {
+        const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+        if (!isFlexible) {
+          const now = new Date();
+          const dayOfWeek = now.getDay();
+          let todaySched = null;
+
+          if (employee.weeklySchedule) {
+            let schedObj = employee.weeklySchedule;
+            if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+              try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+            }
+            if (schedObj && schedObj[dayOfWeek]) {
+              todaySched = schedObj[dayOfWeek];
+            }
+          }
+
+          if (!todaySched) {
+            if (dayOfWeek === 0) todaySched = { isRestDay: true };
+            else if (dayOfWeek === 6) todaySched = { isRestDay: false, workStart: employee.workStart || "09:00" };
+            else todaySched = { isRestDay: false, workStart: employee.workStart || "08:00" };
+          }
+
+          if (todaySched && !todaySched.isRestDay) {
+            const startStr = todaySched.workStart || "08:00";
+            const [startHour, startMin] = startStr.split(':').map(Number);
+            const startSeconds = (startHour * 3600) + (startMin * 60);
+
+            const nowHour = now.getHours();
+            const nowMin = now.getMinutes();
+            const nowSec = now.getSeconds();
+            const nowSeconds = (nowHour * 3600) + (nowMin * 60) + nowSec;
+
+            // Bloquear si intenta ingresar antes de la hora programada menos 5 minutos (300 segundos)
+            const earliestAllowedSeconds = startSeconds - 300;
+            if (nowSeconds < earliestAllowedSeconds) {
+              const diffMin = Math.ceil((earliestAllowedSeconds - nowSeconds) / 60);
+              const earliestHour = Math.floor(earliestAllowedSeconds / 3600);
+              const earliestMin = Math.floor((earliestAllowedSeconds % 3600) / 60);
+              const earliestStr = `${String(earliestHour).padStart(2, '0')}:${String(earliestMin).padStart(2, '0')}`;
+              
+              showToast('error', 'Marcación anticipada bloqueada', `Solo puedes registrar tu ingreso a partir de las ${earliestStr} (5 min antes del turno). Faltan ${diffMin} min.`);
+              return;
+            }
+          }
+        }
+      }
+
       registerAttendanceAction(action);
     });
   });
@@ -1237,17 +1312,26 @@ function setupEventListeners() {
       });
 
       // 1. Guardar en la base de datos dinámica
+      const regScheduleTypeVal = document.getElementById('reg-schedule-type').value;
+      const isFlexible = regScheduleTypeVal === 'flexible';
+      
+      const finalWorkStart = isFlexible ? "—" : workStart;
+      const finalWorkEnd = isFlexible ? "—" : workEnd;
+      const finalBreakStart = isFlexible ? "—" : breakStart;
+      const finalBreakEnd = isFlexible ? "—" : breakEnd;
+      const finalWeeklySchedule = isFlexible ? "flexible" : weeklySchedule;
+
       employeesDatabase[dni] = {
         name: name,
         role: role,
         age: age,
         gender: gender,
         pin: "1234", // PIN por defecto para el primer ingreso
-        workStart: workStart,
-        workEnd: workEnd,
-        breakStart: breakStart,
-        breakEnd: breakEnd,
-        weeklySchedule: weeklySchedule
+        workStart: finalWorkStart,
+        workEnd: finalWorkEnd,
+        breakStart: finalBreakStart,
+        breakEnd: finalBreakEnd,
+        weeklySchedule: finalWeeklySchedule
       };
 
       // 2. Inicializar su estado de asistencia básico
@@ -1261,12 +1345,24 @@ function setupEventListeners() {
       saveState();
       updateAdminView();
       if (googleScriptUrl) {
-         sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd, "1234", weeklySchedule);
+         sendRegistrationToGoogleSheets(dni, name, age, gender, role, finalWorkStart, finalWorkEnd, finalBreakStart, finalBreakEnd, "1234", finalWeeklySchedule);
       }
       
       // Limpiar formulario y lanzar éxito
       formRegisterEmployee.reset();
       
+      // Reestablecer Tipo de Jornada a Fijo
+      const regScheduleType = document.getElementById('reg-schedule-type');
+      const regScheduleContainer = document.getElementById('reg-schedule-details-container');
+      if (regScheduleType && regScheduleContainer) {
+        regScheduleType.value = 'fixed';
+        regScheduleContainer.classList.remove('hidden');
+        document.getElementById('reg-work-start').setAttribute('required', 'required');
+        document.getElementById('reg-work-end').setAttribute('required', 'required');
+        document.getElementById('reg-break-start').setAttribute('required', 'required');
+        document.getElementById('reg-break-end').setAttribute('required', 'required');
+      }
+
       // Reestablecer valores por defecto de tiempo
       document.getElementById('reg-work-start').value = "08:00";
       document.getElementById('reg-work-end').value = "17:00";
@@ -1503,9 +1599,17 @@ function updateAdminView() {
       }
     }
     
-    const lastMarkTime = state.timestamp ? new Date(state.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '---';
-    const lastTodayMark = todayMarks.length > 0 ? todayMarks[todayMarks.length - 1] : null;
-    const deviceDisplay = lastTodayMark && lastTodayMark.device ? lastTodayMark.device : '---';
+    // Encontrar la marca más reciente en todo el historial
+    let lastMarkTime = '---';
+    let deviceDisplay = '---';
+    if (state.history && state.history.length > 0) {
+      const sortedHistory = [...state.history].sort((a, b) => a.timestamp - b.timestamp);
+      const lastMark = sortedHistory[sortedHistory.length - 1];
+      if (lastMark) {
+        lastMarkTime = `${lastMark.dateStr} ${lastMark.timeStr.substring(0, 5)}`;
+        deviceDisplay = lastMark.device || '---';
+      }
+    }
     
     // Status Badge classes
     let statusClass = 'Desconectado';
@@ -2208,7 +2312,17 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
 
   // Obtener horario diario de la distribución semanal
   let daySched = null;
-  if (config && config.weeklySchedule) {
+  const isFlexible = !!(config && (config.workStart === "—" || config.weeklySchedule === "flexible"));
+  if (isFlexible) {
+    daySched = {
+      workStart: "—",
+      workEnd: "—",
+      expectedHours: 0,
+      isRestDay: false,
+      nobreak: true,
+      isFlexible: true
+    };
+  } else if (config && config.weeklySchedule) {
     let schedObj = config.weeklySchedule;
     if (typeof schedObj === 'string' && schedObj.trim() !== '') {
       try {
@@ -2233,12 +2347,13 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
         isRestDay: true
       };
     } else if (dayOfWeek === 6) {
-      // Sábado por defecto
+      // Sábado por defecto (medio día, sin refrigerio)
       daySched = {
         workStart: config.workStart || "09:00",
-        workEnd: config.workEnd || "13:00",
+        workEnd: "13:00",
         expectedHours: 4,
-        isRestDay: false
+        isRestDay: false,
+        nobreak: true
       };
     } else {
       // Lunes a Viernes por defecto
@@ -2300,27 +2415,6 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  let totalElapsedSeconds = 0;
-  if (salidaMark) {
-    totalElapsedSeconds = Math.floor((salidaMark.timestamp - ingresoMark.timestamp) / 1000);
-  } else if (isToday) {
-    totalElapsedSeconds = Math.floor((Date.now() - ingresoMark.timestamp) / 1000);
-  } else {
-    const lastMark = historyForDate[historyForDate.length - 1];
-    totalElapsedSeconds = Math.floor((lastMark.timestamp - ingresoMark.timestamp) / 1000);
-  }
-
-  let workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
-
-  // Expectativas teóricas
-  const expectedStart = timeStrToSeconds(daySched.workStart || "08:00");
-  const expectedEnd = timeStrToSeconds(daySched.workEnd || "17:00");
-  
-  // Break esperado = (SalidaTeórica - EntradaTeórica) - TiempoTeórico
-  const totalShiftSeconds = Math.max(0, expectedEnd - expectedStart);
-  const expectedWorkSeconds = isRestDayOrHolidayOrJustified ? 0 : Math.max(0, (daySched.expectedHours || 8) * 3600);
-  const expectedBreakSeconds = isRestDayOrHolidayOrJustified || daySched.nobreak ? 0 : Math.max(0, totalShiftSeconds - expectedWorkSeconds);
-
   // Detectar si la salida fue autocompletada por omisión
   const isAutoClose = salidaMark && (
     (salidaMark.details && (
@@ -2332,18 +2426,65 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     salidaMark.timeStr === '23:59:58'
   );
 
-  if (isAutoClose) {
-    if (isRestDayOrHolidayOrJustified) {
-      workedSeconds = 0;
-    } else {
-      // Simular salida teórica para penalizar tardanzas pero no generar horas extras
-      const actualEntrySecs = timeStrToSeconds(entradaReal);
-      const calcStartSecs = Math.max(actualEntrySecs, expectedStart);
-      const calculatedElapsed = Math.max(0, expectedEnd - calcStartSecs);
-      
-      workedSeconds = Math.max(0, calculatedElapsed - breakSeconds);
-      if (workedSeconds > expectedWorkSeconds) {
-        workedSeconds = expectedWorkSeconds;
+  let adjustedSalidaTimestamp = salidaMark ? salidaMark.timestamp : null;
+
+  let effectiveIngresoTimestamp = ingresoMark.timestamp;
+  if (!isFlexible && !isRestDayOrHolidayOrJustified) {
+    const startStr = daySched.workStart || "08:00";
+    const [startHour, startMin] = startStr.split(':').map(Number);
+    const expectedStartDateObj = new Date(ingresoMark.timestamp);
+    expectedStartDateObj.setHours(startHour, startMin, 0, 0);
+    const expectedStartTimestamp = expectedStartDateObj.getTime();
+
+    // Si el agente marca antes del horario programado, se le cuenta a partir de la hora de inicio programada
+    if (ingresoMark.timestamp < expectedStartTimestamp) {
+      effectiveIngresoTimestamp = expectedStartTimestamp;
+    }
+  }
+
+  let totalElapsedSeconds = 0;
+  if (salidaMark) {
+    totalElapsedSeconds = Math.max(0, Math.floor((adjustedSalidaTimestamp - effectiveIngresoTimestamp) / 1000));
+  } else if (isToday) {
+    totalElapsedSeconds = Math.max(0, Math.floor((Date.now() - effectiveIngresoTimestamp) / 1000));
+  } else {
+    const lastMark = historyForDate[historyForDate.length - 1];
+    totalElapsedSeconds = Math.max(0, Math.floor((lastMark.timestamp - effectiveIngresoTimestamp) / 1000));
+  }
+
+  let workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
+
+  // Expectativas teóricas
+  let expectedWorkSeconds = 0;
+  let expectedBreakSeconds = 0;
+
+  if (isFlexible) {
+    expectedWorkSeconds = 0;
+    expectedBreakSeconds = 0;
+    if (isAutoClose) {
+      // Cierre automático: capar a un máximo de 8 horas para flexible
+      workedSeconds = Math.min(workedSeconds, 28800);
+    }
+  } else {
+    const expectedStart = timeStrToSeconds(daySched.workStart || "08:00");
+    const expectedEnd = timeStrToSeconds(daySched.workEnd || "17:00");
+    const totalShiftSeconds = Math.max(0, expectedEnd - expectedStart);
+    expectedWorkSeconds = isRestDayOrHolidayOrJustified ? 0 : Math.max(0, (daySched.expectedHours || 8) * 3600);
+    expectedBreakSeconds = isRestDayOrHolidayOrJustified || daySched.nobreak ? 0 : Math.max(0, totalShiftSeconds - expectedWorkSeconds);
+
+    if (isAutoClose) {
+      if (isRestDayOrHolidayOrJustified) {
+        workedSeconds = 0;
+      } else {
+        // Simular salida teórica para penalizar tardanzas pero no generar horas extras
+        const actualEntrySecs = timeStrToSeconds(entradaReal);
+        const calcStartSecs = Math.max(actualEntrySecs, expectedStart);
+        const calculatedElapsed = Math.max(0, expectedEnd - calcStartSecs);
+        
+        workedSeconds = Math.max(0, calculatedElapsed - breakSeconds);
+        if (workedSeconds > expectedWorkSeconds) {
+          workedSeconds = expectedWorkSeconds;
+        }
       }
     }
   }
@@ -2352,7 +2493,11 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   let diffClass = 'diff-neutral';
   let status = '---';
 
-  if (isRestDayOrHolidayOrJustified) {
+  if (isFlexible) {
+    status = '00:00:00';
+    diffSeconds = 0;
+    diffClass = 'diff-neutral';
+  } else if (isRestDayOrHolidayOrJustified) {
     // En día de descanso, feriado o justificado, todas las horas trabajadas son a favor (horas extra)
     if (salidaMark) {
       diffSeconds = isAutoClose ? 0 : workedSeconds;
@@ -2391,10 +2536,10 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  // Evaluar tardanza (entradaReal vs workStart + tolerancia) - No aplica en descanso, feriado o justificado
+  // Evaluar tardanza (entradaReal vs workStart + tolerancia) - No aplica en flexible, descanso, feriado o justificado
   let tardiness = false;
   let tardinessSeconds = 0;
-  if (!isRestDayOrHolidayOrJustified) {
+  if (!isFlexible && !isRestDayOrHolidayOrJustified) {
     const actualEntrySeconds = timeStrToSeconds(entradaReal);
     const scheduledEntrySeconds = timeStrToSeconds(daySched.workStart || "08:00");
     tardiness = actualEntrySeconds > (scheduledEntrySeconds + (tardinessTolerance * 60));
@@ -2403,9 +2548,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  // Evaluar horas adicionales (overtime en día laborable normal)
+  // Evaluar horas adicionales (overtime en día laborable normal) - No aplica en flexible
   let horasAdicionalesSeconds = 0;
-  if (!isRestDayOrHolidayOrJustified && salidaMark && !isAutoClose) {
+  if (!isFlexible && !isRestDayOrHolidayOrJustified && salidaMark && !isAutoClose) {
     const actualExitSeconds = timeStrToSeconds(salidaReal);
     const scheduledExitSeconds = timeStrToSeconds(daySched.workEnd || "17:00");
     if (actualExitSeconds > scheduledExitSeconds) {
@@ -2413,10 +2558,10 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  // Evaluar exceso de break
+  // Evaluar exceso de break - No aplica en flexible o sin descanso
   let excessBreakSeconds = 0;
   let hasExcessBreak = false;
-  if (!isRestDayOrHolidayOrJustified && !daySched.nobreak && breakSeconds > expectedBreakSeconds) {
+  if (!isFlexible && !isRestDayOrHolidayOrJustified && !daySched.nobreak && breakSeconds > expectedBreakSeconds) {
     excessBreakSeconds = breakSeconds - expectedBreakSeconds;
     hasExcessBreak = true;
   }
@@ -2457,6 +2602,21 @@ function updateScheduleSummary(employee, referenceDate, dateLabel) {
   const summaryDiv = document.getElementById('report-schedule-summary');
   if (!summaryDiv || !employee) return;
 
+  const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+  if (isFlexible) {
+    summaryDiv.innerHTML = `
+      <div class="report-schedule-item" style="grid-column: span 4; text-align: center; padding: 15px;">
+        <h4 style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase;">Modalidad de Jornada</h4>
+        <p style="font-size: 1.15rem; font-weight: 600; color: var(--color-blue); margin-top: 8px;">
+          <span class="material-symbols-rounded" style="vertical-align: middle; margin-right: 5px; font-size: 20px;">tune</span>
+          Horario Flexible / Sin Horario Programado
+        </p>
+        <span style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-top: 6px;">El colaborador marca asistencia libremente sin control de tardanzas ni límites de turno fijo.</span>
+      </div>
+    `;
+    return;
+  }
+
   let schedObj = employee.weeklySchedule;
   if (typeof schedObj === 'string' && schedObj.trim() !== '') {
     try { schedObj = JSON.parse(schedObj); } catch(e) { schedObj = null; }
@@ -2483,7 +2643,7 @@ function updateScheduleSummary(employee, referenceDate, dateLabel) {
     let ds = schedObj[dow] || null;
     if (!ds) {
       if (dow === 0) ds = { isRestDay: true, workStart: "---", workEnd: "---", expectedHours: 0 };
-      else if (dow === 6) ds = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: employee.workEnd || "13:00", expectedHours: 4 };
+      else if (dow === 6) ds = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: "13:00", expectedHours: 4, nobreak: true };
       else ds = { isRestDay: false, workStart: employee.workStart || "08:00", workEnd: employee.workEnd || "17:00", expectedHours: 8 };
     }
     return ds;
@@ -2628,11 +2788,12 @@ function getAllCachedHistory() {
   Object.keys(employeesDatabase).forEach(dni => {
     if (attendanceState[dni] && Array.isArray(attendanceState[dni].history)) {
       attendanceState[dni].history.forEach(item => {
+        const itemWithDni = { ...item, dni: item.dni || dni };
         const exists = history.some(h => 
-          h.dni === item.dni && h.timestamp === item.timestamp && h.action === item.action
+          h.dni === itemWithDni.dni && h.timestamp === itemWithDni.timestamp && h.action === itemWithDni.action
         );
         if (!exists) {
-          history.push(item);
+          history.push(itemWithDni);
         }
       });
     }
@@ -2905,7 +3066,12 @@ function renderConsolidatedTable(history) {
   sortedDates.forEach(dateStr => {
     headerHtml += `<th class="text-center" style="min-width: 110px;">${dateStr}</th>`;
   });
-  headerHtml += `</tr>`;
+  headerHtml += `
+      <th class="text-center cell-total-worked" style="min-width: 120px;">Total Horas</th>
+      <th class="text-center cell-total-tardy" style="min-width: 100px;">Tardanzas</th>
+      <th class="text-center cell-total-absent" style="min-width: 100px;">Faltas</th>
+    </tr>
+  `;
   thead.innerHTML = headerHtml;
 
   // 6. Dibujar cuerpo
@@ -2913,7 +3079,7 @@ function renderConsolidatedTable(history) {
   const dnis = Object.keys(employeesDatabase);
   
   if (dnis.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${2 + sortedDates.length}" class="text-center text-muted" style="padding: 25px;">No hay colaboradores en la base de datos.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${5 + sortedDates.length}" class="text-center text-muted" style="padding: 25px;">No hay colaboradores en la base de datos.</td></tr>`;
     return;
   }
 
@@ -2926,29 +3092,123 @@ function renderConsolidatedTable(history) {
       <td>${dni}</td>
     `;
     
+    let totalWorkedSeconds = 0;
+    let totalTardinessCount = 0;
+    let totalAbsentCount = 0;
+
     sortedDates.forEach(dateStr => {
       const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
+
+      // Calcular estados/incidencias
+      let isHoliday = false;
+      const dateParts = dateStr.split('/');
+      if (dateParts.length >= 2) {
+        const dStr = String(parseInt(dateParts[0], 10)).padStart(2, '0');
+        const mStr = String(parseInt(dateParts[1], 10)).padStart(2, '0');
+        const dayMonth = `${dStr}/${mStr}`;
+        const FERIADOS = [
+          "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+        ];
+        isHoliday = FERIADOS.includes(dayMonth);
+        const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
+        if (customHoliday) isHoliday = true;
+      }
+
+      const justification = justificacionesDatabase.find(j => 
+        String(j.dni) === String(dni) && 
+        normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
+      );
+
+      let daySched = null;
+      let dayOfWeek = 1;
+      if (dateParts.length === 3) {
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const year = parseInt(dateParts[2], 10);
+        const dObj = new Date(year, month, day);
+        if (!isNaN(dObj.getTime())) {
+          dayOfWeek = dObj.getDay();
+        }
+      }
+
+      const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+
+      if (isFlexible) {
+        daySched = { workStart: "—", workEnd: "—", expectedHours: 0, isRestDay: false, nobreak: true, isFlexible: true };
+      } else if (employee.weeklySchedule) {
+        let schedObj = employee.weeklySchedule;
+        if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+          try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+        }
+        if (schedObj && schedObj[dayOfWeek]) {
+          daySched = schedObj[dayOfWeek];
+        }
+      }
+
+      if (!daySched) {
+        if (dayOfWeek === 0) daySched = { isRestDay: true, workStart: "---", workEnd: "---", expectedHours: 0 };
+        else if (dayOfWeek === 6) daySched = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: "13:00", expectedHours: 4, nobreak: true };
+        else daySched = { isRestDay: false, workStart: employee.workStart || "08:00", workEnd: employee.workEnd || "17:00", expectedHours: 8 };
+      }
+
+      const isRestDay = !!daySched.isRestDay;
+
       if (dayMarks && dayMarks.length > 0) {
         dayMarks.sort((a, b) => a.timestamp - b.timestamp);
         const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
-        const tardinessIndicator = report.tardiness 
-          ? `<span class="consolidated-tardiness-indicator" title="Tardanza en el ingreso">⚠️</span>` 
-          : '';
-        const hasSalida = dayMarks.some(m => m.action === 'Salida');
         
-        if (hasSalida) {
-          if (report.workedSeconds > 0) {
-            rowHtml += `<td class="text-center" style="font-weight: 600; color: var(--text-primary);">${formatSecondsToHHMMSS(report.workedSeconds)}${tardinessIndicator}</td>`;
-          } else {
-            rowHtml += `<td class="text-center text-muted">00:00:00${tardinessIndicator}</td>`;
-          }
-        } else {
-          rowHtml += `<td class="text-center text-muted" style="opacity: 0.6;">--${tardinessIndicator}</td>`;
+        const inMark = dayMarks.find(m => m.action === 'Ingreso');
+        const outMark = dayMarks.find(m => m.action === 'Salida');
+        
+        const entTime = inMark ? inMark.timeStr : '---';
+        const salTime = outMark ? outMark.timeStr : '---';
+        
+        totalWorkedSeconds += report.workedSeconds;
+        
+        let tooltip = `Fecha: ${dateStr}\nEntrada: ${entTime} ${inMark && inMark.device ? '('+inMark.device+')' : ''}\nSalida: ${salTime} ${outMark && outMark.device ? '('+outMark.device+')' : ''}\nTrabajo Real: ${formatSecondsToHHMMSS(report.workedSeconds)}`;
+        
+        let cellText = formatSecondsToHHMMSS(report.workedSeconds);
+        let cellClass = 'cell-assisted';
+        
+        if (report.tardiness) {
+          totalTardinessCount++;
+          const tardMins = Math.floor(report.tardinessSeconds / 60);
+          tooltip += `\nTardanza: ${tardMins} min`;
+          cellClass = 'cell-tardiness';
         }
+        
+        rowHtml += `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
       } else {
-        rowHtml += `<td class="text-center text-muted" style="opacity: 0.4;">---</td>`;
+        let cellClass = 'cell-absent';
+        let cellText = 'Falta';
+        let tooltip = `Fecha: ${dateStr}`;
+        
+        if (justification) {
+          cellClass = 'cell-justified';
+          cellText = `Justif: ${justification.type}`;
+          tooltip += `\nJustificación: ${justification.type}\nDetalle: ${justification.details}`;
+        } else if (isHoliday) {
+          cellClass = 'cell-holiday';
+          cellText = 'Feriado';
+          tooltip += `\nFeriado`;
+        } else if (isRestDay) {
+          cellClass = 'cell-rest';
+          cellText = 'Descanso';
+          tooltip += `\nDía de Descanso`;
+        } else {
+          totalAbsentCount++;
+          tooltip += `\nFalta / Inasistencia`;
+        }
+        
+        rowHtml += `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
       }
     });
+
+    rowHtml += `
+      <td class="cell-total-worked">${formatSecondsToHHMMSS(totalWorkedSeconds)}</td>
+      <td class="cell-total-tardy">${totalTardinessCount} tard.</td>
+      <td class="cell-total-absent">${totalAbsentCount} faltas</td>
+    `;
     
     tr.innerHTML = rowHtml;
     tbody.appendChild(tr);
@@ -3012,6 +3272,19 @@ function setupAdminTabs() {
         loadConsolidatedReport();
       }
 
+      if (targetTab === 'daily') {
+        const dateInput = document.getElementById('daily-select-date');
+        if (dateInput && !dateInput.value) {
+          const now = new Date();
+          const dayStr = String(now.getDate()).padStart(2, '0');
+          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+          dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
+        }
+        loadDailySummaryReport();
+      }
+
+      // Reverted overtime tab setup
+      
       if (targetTab === 'monthly') {
         const monthInput = document.getElementById('monthly-select-month');
         if (monthInput && !monthInput.value) {
@@ -3056,6 +3329,8 @@ function setupAdminTabs() {
               }
             } else if (tabName === 'consolidated') {
               loadConsolidatedReport();
+            } else if (tabName === 'daily') {
+              loadDailySummaryReport();
             } else if (tabName === 'monthly') {
               loadMonthlyReport();
             }
@@ -3127,6 +3402,69 @@ function setupAdminTabs() {
   };
   if (consolidatedStartDate) consolidatedStartDate.addEventListener('change', onConsolidatedDateChange);
   if (consolidatedEndDate) consolidatedEndDate.addEventListener('change', onConsolidatedDateChange);
+
+  // Filtros rápidos del consolidado
+  const setupQuickFilterDateRange = (start, end) => {
+    if (consolidatedStartDate) consolidatedStartDate.value = start;
+    if (consolidatedEndDate) consolidatedEndDate.value = end;
+    renderConsolidatedTable(cachedConsolidatedHistory);
+    showToast('success', 'Rango aplicado', 'Se actualizó el rango de fecha seleccionado.');
+  };
+
+  const getFormattedDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const btnQuickWeek = document.getElementById('btn-quick-week');
+  if (btnQuickWeek) {
+    btnQuickWeek.addEventListener('click', () => {
+      const now = new Date();
+      const currentDay = now.getDay();
+      const monday = new Date(now);
+      const distance = currentDay === 0 ? -6 : 1 - currentDay;
+      monday.setDate(now.getDate() + distance);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      setupQuickFilterDateRange(getFormattedDate(monday), getFormattedDate(sunday));
+    });
+  }
+
+  const btnQuickLastWeek = document.getElementById('btn-quick-lastweek');
+  if (btnQuickLastWeek) {
+    btnQuickLastWeek.addEventListener('click', () => {
+      const now = new Date();
+      const currentDay = now.getDay();
+      const lastMonday = new Date(now);
+      const distance = currentDay === 0 ? -13 : -6 - currentDay;
+      lastMonday.setDate(now.getDate() + distance);
+      const lastSunday = new Date(lastMonday);
+      lastSunday.setDate(lastMonday.getDate() + 6);
+      setupQuickFilterDateRange(getFormattedDate(lastMonday), getFormattedDate(lastSunday));
+    });
+  }
+
+  const btnQuickMonth = document.getElementById('btn-quick-month');
+  if (btnQuickMonth) {
+    btnQuickMonth.addEventListener('click', () => {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setupQuickFilterDateRange(getFormattedDate(firstDay), getFormattedDate(lastDay));
+    });
+  }
+
+  const btnQuick30Days = document.getElementById('btn-quick-30days');
+  if (btnQuick30Days) {
+    btnQuick30Days.addEventListener('click', () => {
+      const now = new Date();
+      const past = new Date(now);
+      past.setDate(now.getDate() - 30);
+      setupQuickFilterDateRange(getFormattedDate(past), getFormattedDate(now));
+    });
+  }
 }
 
 /* ==========================================================================
@@ -3143,21 +3481,61 @@ window.openEditEmployeeModal = function(dni) {
   document.getElementById('edit-name').value = employee.name;
   document.getElementById('edit-role').value = employee.role;
   document.getElementById('edit-pin').value = employee.pin || "1234";
-  document.getElementById('edit-work-start').value = employee.workStart || "08:00";
-  document.getElementById('edit-work-end').value = employee.workEnd || "17:00";
-  document.getElementById('edit-break-start').value = employee.breakStart || "13:00";
-  document.getElementById('edit-break-end').value = employee.breakEnd || "14:00";
+  const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+  const editScheduleType = document.getElementById('edit-schedule-type');
+  const editScheduleContainer = document.getElementById('edit-schedule-details-container');
+  
+  if (editScheduleType) {
+    editScheduleType.value = isFlexible ? 'flexible' : 'fixed';
+    if (isFlexible) {
+      if (editScheduleContainer) editScheduleContainer.classList.add('hidden');
+      document.getElementById('edit-work-start').removeAttribute('required');
+      document.getElementById('edit-work-end').removeAttribute('required');
+      document.getElementById('edit-break-start').removeAttribute('required');
+      document.getElementById('edit-break-end').removeAttribute('required');
+      
+      document.getElementById('edit-work-start').value = "08:00";
+      document.getElementById('edit-work-end').value = "17:00";
+      document.getElementById('edit-break-start').value = "13:00";
+      document.getElementById('edit-break-end').value = "14:00";
+    } else {
+      if (editScheduleContainer) editScheduleContainer.classList.remove('hidden');
+      document.getElementById('edit-work-start').setAttribute('required', 'required');
+      document.getElementById('edit-work-end').setAttribute('required', 'required');
+      document.getElementById('edit-break-start').setAttribute('required', 'required');
+      document.getElementById('edit-break-end').setAttribute('required', 'required');
+      
+      document.getElementById('edit-work-start').value = employee.workStart || "08:00";
+      document.getElementById('edit-work-end').value = employee.workEnd || "17:00";
+      document.getElementById('edit-break-start').value = employee.breakStart || "13:00";
+      document.getElementById('edit-break-end').value = employee.breakEnd || "14:00";
+    }
+  } else {
+    document.getElementById('edit-work-start').value = employee.workStart || "08:00";
+    document.getElementById('edit-work-end').value = employee.workEnd || "17:00";
+    document.getElementById('edit-break-start').value = employee.breakStart || "13:00";
+    document.getElementById('edit-break-end').value = employee.breakEnd || "14:00";
+  }
 
   // Cargar weeklySchedule del colaborador
-  const sched = employee.weeklySchedule || {
-    "1": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
-    "2": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
-    "3": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
-    "4": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
-    "5": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
-    "6": { workStart: "09:00", workEnd: "13:00", expectedHours: 4, isRestDay: false },
-    "0": { workStart: "08:00", workEnd: "17:00", expectedHours: 0, isRestDay: true }
-  };
+  let sched = employee.weeklySchedule;
+  if (typeof sched === 'string' && sched !== 'flexible') {
+    try { sched = JSON.parse(sched); } catch(e) { sched = null; }
+  }
+  if (sched === 'flexible') {
+    sched = null;
+  }
+  if (!sched) {
+    sched = {
+      "1": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
+      "2": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
+      "3": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
+      "4": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
+      "5": { workStart: "09:00", workEnd: "18:00", expectedHours: 8, isRestDay: false },
+      "6": { workStart: "09:00", workEnd: "13:00", expectedHours: 4, isRestDay: false },
+      "0": { workStart: "08:00", workEnd: "17:00", expectedHours: 0, isRestDay: true }
+    };
+  }
 
   // Populate accordion inputs
   document.querySelectorAll('#edit-weekly-schedule-fields .day-schedule-row').forEach(row => {
@@ -3234,18 +3612,25 @@ function setupEditModalListeners() {
       };
     });
 
+    const isFlexibleVal = document.getElementById('edit-schedule-type').value === 'flexible';
+    const finalWorkStart = isFlexibleVal ? "—" : workStart;
+    const finalWorkEnd = isFlexibleVal ? "—" : workEnd;
+    const finalBreakStart = isFlexibleVal ? "—" : breakStart;
+    const finalBreakEnd = isFlexibleVal ? "—" : breakEnd;
+    const finalWeeklySchedule = isFlexibleVal ? "flexible" : weeklySchedule;
+
     employeesDatabase[dni].name = name;
     employeesDatabase[dni].role = role;
     employeesDatabase[dni].pin = pin;
-    employeesDatabase[dni].workStart = workStart;
-    employeesDatabase[dni].workEnd = workEnd;
-    employeesDatabase[dni].breakStart = breakStart;
-    employeesDatabase[dni].breakEnd = breakEnd;
-    employeesDatabase[dni].weeklySchedule = weeklySchedule;
+    employeesDatabase[dni].workStart = finalWorkStart;
+    employeesDatabase[dni].workEnd = finalWorkEnd;
+    employeesDatabase[dni].breakStart = finalBreakStart;
+    employeesDatabase[dni].breakEnd = finalBreakEnd;
+    employeesDatabase[dni].weeklySchedule = finalWeeklySchedule;
 
     saveState();
     if (googleScriptUrl) {
-      sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStart, breakEnd, pin, weeklySchedule);
+      sendUpdateToGoogleSheets(dni, name, role, finalWorkStart, finalWorkEnd, finalBreakStart, finalBreakEnd, pin, finalWeeklySchedule);
     }
     modal.classList.add('hidden');
     showToast('success', 'Colaborador Actualizado', `Los datos y horarios de ${name} fueron guardados.`);
@@ -3430,6 +3815,7 @@ function exportConsolidatedExcel() {
   // Cabecera
   const header = ["Colaborador", "DNI"];
   sortedDates.forEach(dateStr => header.push(dateStr));
+  header.push("Total Horas", "Tardanzas", "Faltas");
   rows.push(header);
   
   // Filas por cada colaborador
@@ -3437,14 +3823,74 @@ function exportConsolidatedExcel() {
     const employee = employeesDatabase[dni];
     const row = [employee.name, dni];
     
+    let totalWorkedSeconds = 0;
+    let totalTardinessCount = 0;
+    let totalAbsentCount = 0;
+    
     sortedDates.forEach(dateStr => {
       const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
+      
+      let isHoliday = false;
+      const dateParts = dateStr.split('/');
+      if (dateParts.length >= 2) {
+        const dStr = String(parseInt(dateParts[0], 10)).padStart(2, '0');
+        const mStr = String(parseInt(dateParts[1], 10)).padStart(2, '0');
+        const dayMonth = `${dStr}/${mStr}`;
+        const FERIADOS = [
+          "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+        ];
+        isHoliday = FERIADOS.includes(dayMonth);
+        const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
+        if (customHoliday) isHoliday = true;
+      }
+
+      const justification = justificacionesDatabase.find(j => 
+        String(j.dni) === String(dni) && 
+        normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
+      );
+
+      let daySched = null;
+      let dayOfWeek = 1;
+      if (dateParts.length === 3) {
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const year = parseInt(dateParts[2], 10);
+        const dObj = new Date(year, month, day);
+        if (!isNaN(dObj.getTime())) {
+          dayOfWeek = dObj.getDay();
+        }
+      }
+
+      const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+      if (isFlexible) {
+        daySched = { isRestDay: false, workStart: "—", workEnd: "—", expectedHours: 0, nobreak: true, isFlexible: true };
+      } else if (employee.weeklySchedule) {
+        let schedObj = employee.weeklySchedule;
+        if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+          try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+        }
+        if (schedObj && schedObj[dayOfWeek]) {
+          daySched = schedObj[dayOfWeek];
+        }
+      }
+      if (!daySched) {
+        if (dayOfWeek === 0) daySched = { isRestDay: true };
+        else daySched = { isRestDay: false };
+      }
+
+      const isRestDay = !!daySched.isRestDay;
+
       if (dayMarks && dayMarks.length > 0) {
         dayMarks.sort((a, b) => a.timestamp - b.timestamp);
         const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
         const tardyMarker = report.tardiness ? " (T)" : "";
         const hasSalida = dayMarks.some(m => m.action === 'Salida');
         
+        totalWorkedSeconds += report.workedSeconds;
+        if (report.tardiness) {
+          totalTardinessCount++;
+        }
+
         if (hasSalida) {
           if (report.workedSeconds > 0) {
             row.push(`${formatSecondsToHHMMSS(report.workedSeconds)}${tardyMarker}`);
@@ -3455,9 +3901,19 @@ function exportConsolidatedExcel() {
           row.push(`--${tardyMarker}`);
         }
       } else {
-        row.push("---");
+        if (justification) {
+          row.push(`Justificado: ${justification.type}`);
+        } else if (isHoliday) {
+          row.push("Feriado");
+        } else if (isRestDay) {
+          row.push("Descanso");
+        } else {
+          totalAbsentCount++;
+          row.push("Falta");
+        }
       }
     });
+    row.push(formatSecondsToHHMMSS(totalWorkedSeconds), `${totalTardinessCount} tard.`, `${totalAbsentCount} faltas`);
     rows.push(row);
   });
   
@@ -3482,6 +3938,48 @@ function exportConsolidatedExcel() {
    ========================================================================== */
 
 function setupWeeklyScheduleUIListeners() {
+  // Toggle para Tipo de Jornada en Registro
+  const regScheduleType = document.getElementById('reg-schedule-type');
+  const regScheduleContainer = document.getElementById('reg-schedule-details-container');
+  if (regScheduleType && regScheduleContainer) {
+    regScheduleType.addEventListener('change', () => {
+      if (regScheduleType.value === 'flexible') {
+        regScheduleContainer.classList.add('hidden');
+        document.getElementById('reg-work-start').removeAttribute('required');
+        document.getElementById('reg-work-end').removeAttribute('required');
+        document.getElementById('reg-break-start').removeAttribute('required');
+        document.getElementById('reg-break-end').removeAttribute('required');
+      } else {
+        regScheduleContainer.classList.remove('hidden');
+        document.getElementById('reg-work-start').setAttribute('required', 'required');
+        document.getElementById('reg-work-end').setAttribute('required', 'required');
+        document.getElementById('reg-break-start').setAttribute('required', 'required');
+        document.getElementById('reg-break-end').setAttribute('required', 'required');
+      }
+    });
+  }
+
+  // Toggle para Tipo de Jornada en Edición
+  const editScheduleType = document.getElementById('edit-schedule-type');
+  const editScheduleContainer = document.getElementById('edit-schedule-details-container');
+  if (editScheduleType && editScheduleContainer) {
+    editScheduleType.addEventListener('change', () => {
+      if (editScheduleType.value === 'flexible') {
+        editScheduleContainer.classList.add('hidden');
+        document.getElementById('edit-work-start').removeAttribute('required');
+        document.getElementById('edit-work-end').removeAttribute('required');
+        document.getElementById('edit-break-start').removeAttribute('required');
+        document.getElementById('edit-break-end').removeAttribute('required');
+      } else {
+        editScheduleContainer.classList.remove('hidden');
+        document.getElementById('edit-work-start').setAttribute('required', 'required');
+        document.getElementById('edit-work-end').setAttribute('required', 'required');
+        document.getElementById('edit-break-start').setAttribute('required', 'required');
+        document.getElementById('edit-break-end').setAttribute('required', 'required');
+      }
+    });
+  }
+
   const btnToggleReg = document.getElementById('btn-toggle-reg-weekly-schedule');
   const regFields = document.getElementById('reg-weekly-schedule-fields');
   if (btnToggleReg && regFields) {
@@ -3591,6 +4089,363 @@ function setupMonthlyReportUIListeners() {
   if (btnExportExcel) {
     btnExportExcel.addEventListener('click', exportMonthlyExcel);
   }
+}
+
+function setupDailySummaryListeners() {
+  const btnFilter = document.getElementById('btn-filter-daily');
+  if (btnFilter) {
+    btnFilter.addEventListener('click', loadDailySummaryReport);
+  }
+
+  const btnExportExcel = document.getElementById('btn-export-daily-excel');
+  if (btnExportExcel) {
+    btnExportExcel.addEventListener('click', exportDailySummaryExcel);
+  }
+
+  const btnExportPDF = document.getElementById('btn-export-daily-pdf');
+  if (btnExportPDF) {
+    btnExportPDF.addEventListener('click', () => window.print());
+  }
+}
+
+function loadDailySummaryReport() {
+  const tbody = document.getElementById('admin-daily-table-body');
+  if (!tbody) return;
+
+  const dateInput = document.getElementById('daily-select-date');
+  if (!dateInput || !dateInput.value) {
+    const now = new Date();
+    const dayStr = String(now.getDate()).padStart(2, '0');
+    const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+    dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
+  }
+
+  const history = getAllCachedHistory();
+  renderDailySummaryTable(history);
+}
+
+function renderDailySummaryTable(history) {
+  const tbody = document.getElementById('admin-daily-table-body');
+  if (!tbody) return;
+
+  const dateInput = document.getElementById('daily-select-date');
+  if (!dateInput || !dateInput.value) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 25px;">Por favor selecciona una fecha válida.</td></tr>';
+    return;
+  }
+
+  const [yearStr, monthStr, dayStr] = dateInput.value.split('-');
+  const selectedDateStr = `${dayStr}/${monthStr}/${yearStr}`;
+  const normSelectedDate = normalizeDateStr(selectedDateStr);
+
+  const printDate = document.getElementById('print-daily-selected');
+  if (printDate) {
+    printDate.textContent = selectedDateStr;
+  }
+
+  const staffIds = Object.keys(employeesDatabase).sort((a, b) => 
+    employeesDatabase[a].name.localeCompare(employeesDatabase[b].name)
+  );
+
+  if (staffIds.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 25px;">No hay colaboradores registrados.</td></tr>';
+    return;
+  }
+
+  const normalizedHistory = history.map(item => {
+    const normDate = normalizeDateStr(item.dateStr);
+    const normTime = normalizeTimeStr(item.timeStr);
+    const ts = getTimestampFromDateAndTime(normDate, normTime);
+    return {
+      ...item,
+      dateStr: normDate,
+      timeStr: normTime,
+      timestamp: ts
+    };
+  }).filter(item => item.dateStr === normSelectedDate);
+
+  let html = '';
+
+  staffIds.forEach(dni => {
+    const employee = employeesDatabase[dni];
+    const dayMarks = normalizedHistory.filter(item => String(item.dni) === String(dni));
+
+    let isHoliday = false;
+    const parts = selectedDateStr.split('/');
+    if (parts.length >= 2) {
+      const dStr = String(parseInt(parts[0], 10)).padStart(2, '0');
+      const mStr = String(parseInt(parts[1], 10)).padStart(2, '0');
+      const dayMonth = `${dStr}/${mStr}`;
+      const FERIADOS = [
+        "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+      ];
+      isHoliday = FERIADOS.includes(dayMonth);
+      const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normSelectedDate);
+      if (customHoliday) isHoliday = true;
+    }
+
+    const justification = justificacionesDatabase.find(j => 
+      String(j.dni) === String(dni) && 
+      normalizeDateStr(j.dateStr) === normSelectedDate
+    );
+
+    let daySched = null;
+    let dayOfWeek = 1;
+    const d = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, parseInt(dayStr, 10));
+    if (!isNaN(d.getTime())) {
+      dayOfWeek = d.getDay();
+    }
+
+    const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+
+    if (isFlexible) {
+      daySched = { workStart: "—", workEnd: "—", expectedHours: 0, isRestDay: false, nobreak: true, isFlexible: true };
+    } else if (employee.weeklySchedule) {
+      let schedObj = employee.weeklySchedule;
+      if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+        try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+      }
+      if (schedObj && schedObj[dayOfWeek]) {
+        daySched = schedObj[dayOfWeek];
+      }
+    }
+
+    if (!daySched) {
+      if (dayOfWeek === 0) daySched = { isRestDay: true, workStart: "---", workEnd: "---", expectedHours: 0 };
+      else if (dayOfWeek === 6) daySched = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: "13:00", expectedHours: 4, nobreak: true };
+      else daySched = { isRestDay: false, workStart: employee.workStart || "08:00", workEnd: employee.workEnd || "17:00", expectedHours: 8 };
+    }
+
+    const isRestDay = !!daySched.isRestDay;
+
+    let rowClass = '';
+    let statusBadge = '';
+    let entradaDisplay = '---';
+    let salidaDisplay = '---';
+    let breakDisplay = '00:00:00';
+    let workedDisplay = '00:00:00';
+    let tardinessDisplay = '---';
+
+    if (dayMarks.length > 0) {
+      const report = calculateWorkedTimesForDate(dayMarks, employee, selectedDateStr);
+      
+      const inMark = dayMarks.find(m => m.action === 'Ingreso');
+      const outMark = dayMarks.find(m => m.action === 'Salida');
+      
+      entradaDisplay = inMark ? `${inMark.timeStr} ${getDeviceIconShortHTML(inMark.device)}` : '---';
+      salidaDisplay = outMark ? `${outMark.timeStr} ${getDeviceIconShortHTML(outMark.device)}` : '---';
+      breakDisplay = formatSecondsToHHMMSS(report.breakSeconds);
+      workedDisplay = formatSecondsToHHMMSS(report.workedSeconds);
+
+      if (report.tardiness) {
+        const mins = Math.floor(report.tardinessSeconds / 60);
+        tardinessDisplay = `<span style="color: var(--color-error); font-weight: 600;">${mins} min</span>`;
+        statusBadge = `<span class="table-status-badge Salida">Tardanza</span>`;
+        rowClass = 'row-tardiness';
+      } else {
+        tardinessDisplay = isFlexible ? '---' : '0 min';
+        statusBadge = `<span class="table-status-badge Ingreso">Asistió</span>`;
+      }
+      
+      if (isFlexible) {
+        statusBadge = `<span class="table-status-badge Fin-Refrigerio">Asistió (Flexible)</span>`;
+      }
+
+    } else {
+      if (justification) {
+        statusBadge = `<span class="table-status-badge Inicio-Refrigerio" title="${justification.details}">Justificado: ${justification.type}</span>`;
+        rowClass = 'row-justified';
+      } else if (isHoliday) {
+        statusBadge = `<span class="table-status-badge Fin-Refrigerio">Feriado</span>`;
+        rowClass = 'row-holiday';
+      } else if (isRestDay) {
+        statusBadge = `<span class="table-status-badge" style="background: var(--surface-1); color: var(--text-secondary);">Descanso</span>`;
+        rowClass = 'row-rest';
+      } else {
+        statusBadge = `<span class="table-status-badge Salida">Falta</span>`;
+        rowClass = 'row-absent';
+      }
+    }
+
+    html += `
+      <tr class="${rowClass}">
+        <td class="table-employee-name">${employee.name}</td>
+        <td>${dni}</td>
+        <td class="text-center">${entradaDisplay}</td>
+        <td class="text-center">${salidaDisplay}</td>
+        <td class="text-center">${breakDisplay}</td>
+        <td class="text-center" style="font-weight: 600;">${workedDisplay}</td>
+        <td class="text-center">${tardinessDisplay}</td>
+        <td class="text-center">${statusBadge}</td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function exportDailySummaryExcel() {
+  const dateInput = document.getElementById('daily-select-date');
+  if (!dateInput || !dateInput.value) {
+    showToast('error', 'Error', 'Selecciona una fecha válida antes de exportar.');
+    return;
+  }
+  const [yearStr, monthStr, dayStr] = dateInput.value.split('-');
+  const selectedDateStr = `${dayStr}/${monthStr}/${yearStr}`;
+
+  const wb = XLSX.utils.book_new();
+  const rows = [];
+
+  rows.push(["ASISTENCIAPRO - REPORTE DIARIO DE ASISTENCIA"]);
+  rows.push([`Fecha del Reporte: ${selectedDateStr}`]);
+  rows.push([]);
+
+  const header = [
+    "Colaborador",
+    "DNI",
+    "Hora Entrada",
+    "Dispositivo Entrada",
+    "Hora Salida",
+    "Dispositivo Salida",
+    "Refrigerio Usado",
+    "Trabajo Real (HH:MM:SS)",
+    "Minutos de Tardanza",
+    "Estado / Incidencia"
+  ];
+  rows.push(header);
+
+  const history = getAllCachedHistory();
+  const normSelectedDate = normalizeDateStr(selectedDateStr);
+
+  const normalizedHistory = history.map(item => {
+    return {
+      ...item,
+      dateStr: normalizeDateStr(item.dateStr),
+      timeStr: normalizeTimeStr(item.timeStr)
+    };
+  }).filter(item => item.dateStr === normSelectedDate);
+
+  const staffIds = Object.keys(employeesDatabase).sort((a, b) => 
+    employeesDatabase[a].name.localeCompare(employeesDatabase[b].name)
+  );
+
+  staffIds.forEach(dni => {
+    const employee = employeesDatabase[dni];
+    const dayMarks = normalizedHistory.filter(item => String(item.dni) === String(dni));
+
+    let isHoliday = false;
+    const parts = selectedDateStr.split('/');
+    if (parts.length >= 2) {
+      const dStr = String(parseInt(parts[0], 10)).padStart(2, '0');
+      const mStr = String(parseInt(parts[1], 10)).padStart(2, '0');
+      const dayMonth = `${dStr}/${mStr}`;
+      const FERIADOS = [
+        "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+      ];
+      isHoliday = FERIADOS.includes(dayMonth);
+      const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normSelectedDate);
+      if (customHoliday) isHoliday = true;
+    }
+
+    const justification = justificacionesDatabase.find(j => 
+      String(j.dni) === String(dni) && 
+      normalizeDateStr(j.dateStr) === normSelectedDate
+    );
+
+    let daySched = null;
+    let dayOfWeek = 1;
+    const d = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, parseInt(dayStr, 10));
+    if (!isNaN(d.getTime())) {
+      dayOfWeek = d.getDay();
+    }
+    const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+    
+    if (isFlexible) {
+      daySched = { isRestDay: false, workStart: "—", workEnd: "—", expectedHours: 0, nobreak: true, isFlexible: true };
+    } else if (employee.weeklySchedule) {
+      let schedObj = employee.weeklySchedule;
+      if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+        try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+      }
+      if (schedObj && schedObj[dayOfWeek]) {
+        daySched = schedObj[dayOfWeek];
+      }
+    }
+
+    if (!daySched) {
+      if (dayOfWeek === 0) daySched = { isRestDay: true };
+      else daySched = { isRestDay: false };
+    }
+
+    const isRestDay = !!daySched.isRestDay;
+
+    let entradaTime = '---';
+    let entradaDevice = '---';
+    let salidaTime = '---';
+    let salidaDevice = '---';
+    let breakTime = '00:00:00';
+    let workedTime = '00:00:00';
+    let tardinessMins = '---';
+    let statusText = '---';
+
+    if (dayMarks.length > 0) {
+      const report = calculateWorkedTimesForDate(dayMarks, employee, selectedDateStr);
+      const inMark = dayMarks.find(m => m.action === 'Ingreso');
+      const outMark = dayMarks.find(m => m.action === 'Salida');
+
+      entradaTime = inMark ? inMark.timeStr : '---';
+      entradaDevice = inMark ? (inMark.device || 'Desconocido') : '---';
+      salidaTime = outMark ? outMark.timeStr : '---';
+      salidaDevice = outMark ? (outMark.device || 'Desconocido') : '---';
+
+      breakTime = formatSecondsToHHMMSS(report.breakSeconds);
+      workedTime = formatSecondsToHHMMSS(report.workedSeconds);
+
+      if (report.tardiness) {
+        tardinessMins = `${Math.floor(report.tardinessSeconds / 60)} min`;
+        statusText = "Tardanza";
+      } else {
+        tardinessMins = isFlexible ? "---" : "0 min";
+        statusText = isFlexible ? "Asistió (Flexible)" : "Asistió Normal";
+      }
+    } else {
+      if (justification) {
+        statusText = `Justificado: ${justification.type}`;
+      } else if (isHoliday) {
+        statusText = "Feriado";
+      } else if (isRestDay) {
+        statusText = "Descanso";
+      } else {
+        statusText = "Falta";
+      }
+    }
+
+    rows.push([
+      employee.name,
+      dni,
+      entradaTime,
+      entradaDevice,
+      salidaTime,
+      salidaDevice,
+      breakTime,
+      workedTime,
+      tardinessMins,
+      statusText
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  
+  const colWidths = header.map((_, colIndex) => {
+    const maxLen = Math.max(...rows.slice(3).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
+    return { wch: Math.max(12, maxLen + 3) };
+  });
+  ws['!cols'] = colWidths;
+
+  XLSX.utils.book_append_sheet(wb, ws, "Resumen Diario");
+  XLSX.writeFile(wb, `Resumen_Diario_Asistencia_${dateInput.value}.xlsx`);
+  
+  showToast('success', 'Exportación Completa', 'Se descargó el resumen diario en formato Excel (.xlsx).');
 }
 
 function loadMonthlyReport() {
@@ -4429,7 +5284,7 @@ function renderEmployeeWeeklySummary(dni) {
     }
     if (!daySched) {
       if (dayOfWeek === 0) daySched = { isRestDay: true };
-      else if (dayOfWeek === 6) daySched = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: employee.workEnd || "13:00", expectedHours: 4 };
+      else if (dayOfWeek === 6) daySched = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: "13:00", expectedHours: 4, nobreak: true };
       else daySched = { isRestDay: false, workStart: employee.workStart || "08:00", workEnd: employee.workEnd || "17:00", expectedHours: 8 };
     }
     
@@ -4577,4 +5432,324 @@ function secondsToHrMinString(totalSeconds) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   return `${hours}h ${minutes}m`;
+}
+
+/* ==========================================================================
+   AGENT PORTAL UPGRADES (Option 1, 2, and 4)
+   ========================================================================== */
+
+function setupAgentHistoryListeners() {
+  const btnOpen = document.getElementById('btn-open-agent-history');
+  const btnClose = document.getElementById('btn-agent-history-close');
+  const modal = document.getElementById('modal-agent-history');
+  
+  const btnCurrent = document.getElementById('btn-agent-history-current');
+  const btnPrevious = document.getElementById('btn-agent-history-previous');
+
+  if (btnOpen) {
+    btnOpen.addEventListener('click', () => {
+      if (btnCurrent && btnPrevious) {
+        btnCurrent.className = 'btn-primary';
+        btnPrevious.className = 'btn-outline';
+      }
+      openAgentHistoryModal(true);
+    });
+  }
+
+  if (btnClose && modal) {
+    btnClose.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+  }
+
+  if (btnCurrent) {
+    btnCurrent.addEventListener('click', () => {
+      btnCurrent.className = 'btn-primary';
+      if (btnPrevious) btnPrevious.className = 'btn-outline';
+      openAgentHistoryModal(true);
+    });
+  }
+
+  if (btnPrevious) {
+    btnPrevious.addEventListener('click', () => {
+      btnPrevious.className = 'btn-primary';
+      if (btnCurrent) btnCurrent.className = 'btn-outline';
+      openAgentHistoryModal(false);
+    });
+  }
+}
+
+function updateAgentGuideAndSchedule() {
+  if (!currentSession) return;
+
+  const dni = currentSession.dni;
+  const employee = employeesDatabase[dni];
+  if (!employee) return;
+
+  const guideText = document.getElementById('agent-guide-message');
+  const scheduleText = document.getElementById('agent-today-schedule-text');
+
+  if (!guideText || !scheduleText) return;
+
+  // 1. Mostrar Información de Horario de Hoy
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const todayStr = now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+  const normToday = normalizeDateStr(todayStr);
+
+  let isHoliday = false;
+  const parts = todayStr.split('/');
+  if (parts.length >= 2) {
+    const dStr = String(parseInt(parts[0], 10)).padStart(2, '0');
+    const mStr = String(parseInt(parts[1], 10)).padStart(2, '0');
+    const dayMonth = `${dStr}/${mStr}`;
+    const FERIADOS = [
+      "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+    ];
+    isHoliday = FERIADOS.includes(dayMonth);
+    const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normToday);
+    if (customHoliday) isHoliday = true;
+  }
+
+  const justification = justificacionesDatabase.find(j => 
+    String(j.dni) === String(dni) && 
+    normalizeDateStr(j.dateStr) === normToday
+  );
+
+  let daySched = null;
+  const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+
+  if (isFlexible) {
+    daySched = { workStart: "—", workEnd: "—", expectedHours: 0, isRestDay: false, nobreak: true, isFlexible: true };
+  } else if (employee.weeklySchedule) {
+    let schedObj = employee.weeklySchedule;
+    if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+      try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+    }
+    if (schedObj && schedObj[dayOfWeek]) {
+      daySched = schedObj[dayOfWeek];
+    }
+  }
+
+  if (!daySched) {
+    if (dayOfWeek === 0) daySched = { isRestDay: true, workStart: "---", workEnd: "---", expectedHours: 0 };
+    else if (dayOfWeek === 6) daySched = { isRestDay: false, workStart: employee.workStart || "09:00", workEnd: "13:00", expectedHours: 4, nobreak: true };
+    else daySched = { isRestDay: false, workStart: employee.workStart || "08:00", workEnd: employee.workEnd || "17:00", expectedHours: 8 };
+  }
+
+  const isRestDay = !!daySched.isRestDay;
+
+  if (justification) {
+    scheduleText.textContent = `Permiso Justificado: ${justification.type}`;
+  } else if (isHoliday) {
+    scheduleText.textContent = `Hoy es día Feriado`;
+  } else if (isRestDay) {
+    scheduleText.textContent = `Hoy es tu día de Descanso programado`;
+  } else if (isFlexible) {
+    scheduleText.textContent = `Modalidad: Horario Flexible / Sin Horarios`;
+  } else {
+    const breakStart = employee.breakStart || "13:00";
+    const breakEnd = employee.breakEnd || "14:00";
+    const noBreakText = daySched.nobreak ? " (Sin refrigerio)" : ` (Break: ${breakStart} a ${breakEnd})`;
+    scheduleText.textContent = `Turno hoy: ${daySched.workStart} a ${daySched.workEnd}${noBreakText}`;
+  }
+
+  // 2. Establecer Mensaje de Guía Dinámico
+  const allHistory = attendanceState[dni].history || [];
+  const todayMarks = allHistory.filter(item => normalizeDateStr(item.dateStr) === normToday);
+
+  const hasIngreso = todayMarks.some(m => m.action === 'Ingreso');
+  const hasInicioBreak = todayMarks.some(m => m.action === 'Inicio Refrigerio');
+  const hasFinBreak = todayMarks.some(m => m.action === 'Fin Refrigerio');
+  const hasSalida = todayMarks.some(m => m.action === 'Salida');
+
+  if (justification) {
+    guideText.innerHTML = `Tienes un permiso registrado para hoy:<br><strong>${justification.type}</strong> (${justification.details})`;
+  } else if (isHoliday) {
+    guideText.innerHTML = `¡Hola! Hoy es día feriado oficial. Disfruta de tu descanso.`;
+  } else if (isRestDay) {
+    guideText.innerHTML = `¡Hola! Hoy es tu día de descanso semanal programado. ¡Que tengas un excelente día!`;
+  } else if (hasSalida) {
+    guideText.innerHTML = `¡Buen trabajo por hoy! Tu salida ha sido registrada. Jornada finalizada con éxito.`;
+  } else if (hasFinBreak) {
+    guideText.innerHTML = `Retornaste del refrigerio. Tu siguiente y último paso de hoy es registrar tu <strong>Salida</strong> al terminar tus labores.`;
+  } else if (hasInicioBreak) {
+    guideText.innerHTML = `Te encuentras en refrigerio. Recuerda marcar <strong>Fin de Refrigerio</strong> al terminar para retomar tus actividades.`;
+  } else if (hasIngreso) {
+    if (daySched.nobreak || isFlexible) {
+      guideText.innerHTML = `Tu jornada laboral está activa. Tu siguiente paso es registrar tu <strong>Salida</strong> al finalizar tus actividades de hoy.`;
+    } else {
+      guideText.innerHTML = `Tu jornada laboral está activa. Tu siguiente paso es registrar tu <strong>Inicio de Refrigerio</strong> cuando corresponda.`;
+    }
+  } else {
+    guideText.innerHTML = `¡Hola, ${employee.name.split(' ')[0]}! Recuerda registrar tu <strong>Ingreso</strong> para dar inicio a tu jornada de hoy.`;
+  }
+}
+
+function openAgentHistoryModal(isCurrentMonth = true) {
+  const modal = document.getElementById('modal-agent-history');
+  const tbody = document.getElementById('agent-history-table-body');
+  if (!modal || !tbody) return;
+
+  const dni = currentSession.dni;
+  const employee = employeesDatabase[dni];
+  if (!employee) return;
+
+  tbody.innerHTML = '';
+  modal.classList.remove('hidden');
+
+  const history = (attendanceState[dni] && Array.isArray(attendanceState[dni].history)) ? attendanceState[dni].history : [];
+  const now = new Date();
+  let year = now.getFullYear();
+  let month = now.getMonth(); // 0-indexed
+
+  if (isCurrentMonth === undefined) {
+    isCurrentMonth = true;
+  }
+
+  if (!isCurrentMonth) {
+    month--;
+    if (month < 0) {
+      month = 11;
+      year--;
+    }
+  }
+
+  // Filtrar historial del agente para el mes seleccionado
+  const normalizedHistory = history.map(item => {
+    const normDate = normalizeDateStr(item.dateStr);
+    const normTime = normalizeTimeStr(item.timeStr);
+    const ts = getTimestampFromDateAndTime(normDate, normTime);
+    return {
+      ...item,
+      dateStr: normDate,
+      timeStr: normTime,
+      timestamp: ts
+    };
+  }).filter(item => {
+    const parts = item.dateStr.split('/');
+    if (parts.length !== 3) return false;
+    const itemYear = parseInt(parts[2], 10);
+    const itemMonth = parseInt(parts[1], 10) - 1;
+    return itemYear === year && itemMonth === month;
+  });
+
+  // Determinar cuántos días tiene el mes a listar
+  let totalDays = 31;
+  if (isCurrentMonth) {
+    totalDays = now.getDate(); // Listar hasta hoy
+  } else {
+    // Total de días del mes anterior
+    totalDays = new Date(year, month + 1, 0).getDate();
+  }
+
+  let html = '';
+
+  for (let dNum = totalDays; dNum >= 1; dNum--) {
+    const dStr = String(dNum).padStart(2, '0');
+    const mStr = String(month + 1).padStart(2, '0');
+    const dateStr = `${dStr}/${mStr}/${year}`;
+    const normDate = normalizeDateStr(dateStr);
+
+    const dayMarks = normalizedHistory.filter(item => item.dateStr === normDate);
+
+    let isHoliday = false;
+    const dayMonth = `${dStr}/${mStr}`;
+    const FERIADOS = [
+      "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+    ];
+    isHoliday = FERIADOS.includes(dayMonth);
+    const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normDate);
+    if (customHoliday) isHoliday = true;
+
+    const justification = justificacionesDatabase.find(j => 
+      String(j.dni) === String(dni) && 
+      normalizeDateStr(j.dateStr) === normDate
+    );
+
+    const dObj = new Date(year, month, dNum);
+    const dayOfWeek = dObj.getDay();
+
+    const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
+    let daySched = null;
+
+    if (isFlexible) {
+      daySched = { workStart: "—", workEnd: "—", expectedHours: 0, isRestDay: false, nobreak: true, isFlexible: true };
+    } else if (employee.weeklySchedule) {
+      let schedObj = employee.weeklySchedule;
+      if (typeof schedObj === 'string' && schedObj.trim() !== '') {
+        try { schedObj = JSON.parse(schedObj); } catch (e) { schedObj = null; }
+      }
+      if (schedObj && schedObj[dayOfWeek]) {
+        daySched = schedObj[dayOfWeek];
+      }
+    }
+
+    if (!daySched) {
+      if (dayOfWeek === 0) daySched = { isRestDay: true };
+      else daySched = { isRestDay: false };
+    }
+
+    const isRestDay = !!daySched.isRestDay;
+
+    let entradaDisplay = '---';
+    let salidaDisplay = '---';
+    let breakDisplay = '00:00:00';
+    let workedDisplay = '00:00:00';
+    let tardinessDisplay = '---';
+    let statusBadge = '';
+
+    if (dayMarks.length > 0) {
+      const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+      const inMark = dayMarks.find(m => m.action === 'Ingreso');
+      const outMark = dayMarks.find(m => m.action === 'Salida');
+
+      entradaDisplay = inMark ? inMark.timeStr : '---';
+      salidaDisplay = outMark ? outMark.timeStr : '---';
+      breakDisplay = formatSecondsToHHMMSS(report.breakSeconds);
+      workedDisplay = formatSecondsToHHMMSS(report.workedSeconds);
+
+      if (report.tardiness) {
+        const mins = Math.floor(report.tardinessSeconds / 60);
+        tardinessDisplay = `<span style="color: var(--color-error); font-weight:600;">${mins} min</span>`;
+        statusBadge = `<span class="table-status-badge Salida">Tardanza</span>`;
+      } else {
+        tardinessDisplay = isFlexible ? '---' : '0 min';
+        statusBadge = `<span class="table-status-badge Ingreso">Asistió</span>`;
+      }
+      if (isFlexible) {
+        statusBadge = `<span class="table-status-badge Fin-Refrigerio">Asistió (Flex)</span>`;
+      }
+    } else {
+      if (justification) {
+        statusBadge = `<span class="table-status-badge Inicio-Refrigerio" title="${justification.details}">Justificado: ${justification.type}</span>`;
+      } else if (isHoliday) {
+        statusBadge = `<span class="table-status-badge Fin-Refrigerio">Feriado</span>`;
+      } else if (isRestDay) {
+        statusBadge = `<span class="table-status-badge" style="background: var(--surface-1); color: var(--text-secondary);">Descanso</span>`;
+      } else {
+        statusBadge = `<span class="table-status-badge Salida">Falta</span>`;
+      }
+    }
+
+    const dayName = dObj.toLocaleDateString('es-ES', { weekday: 'long' });
+    const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+
+    html += `
+      <tr>
+        <td>
+          <div style="font-weight: 600;">${dateStr}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">${capitalizedDay}</div>
+        </td>
+        <td class="text-center">${entradaDisplay}</td>
+        <td class="text-center">${salidaDisplay}</td>
+        <td class="text-center">${breakDisplay}</td>
+        <td class="text-center" style="font-weight: 600;">${workedDisplay}</td>
+        <td class="text-center">${tardinessDisplay}</td>
+        <td class="text-center">${statusBadge}</td>
+      </tr>
+    `;
+  }
+
+  tbody.innerHTML = html;
 }
