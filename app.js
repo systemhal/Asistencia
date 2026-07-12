@@ -106,6 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupWeeklyScheduleUIListeners();
   setupMonthlyReportUIListeners();
   setupDailySummaryListeners();
+  setupDeviceSecurityUIListeners();
+  validateDeviceSecurity();
   updatePrintTimestamp();
   syncInitialData();
 });
@@ -221,6 +223,7 @@ function loadLocalStorage() {
     toleranceInput.value = tardinessTolerance;
   }
   autoClosePendingSessions();
+  loadSecuritySettings();
 }
 
 function saveState() {
@@ -1183,6 +1186,24 @@ function setupEventListeners() {
       showToast('error', 'URL inválida', 'La URL debe comenzar con https://');
       return;
     }
+
+    // Guardar configuraciones de seguridad
+    const chkMobile = document.getElementById('chk-block-mobile');
+    const chkPcs = document.getElementById('chk-restrict-pcs');
+    if (chkMobile) {
+      securityBlockMobile = chkMobile.checked;
+      localStorage.setItem('security_block_mobile', securityBlockMobile);
+    }
+    if (chkPcs) {
+      securityRestrictPcs = chkPcs.checked;
+      localStorage.setItem('security_restrict_pcs', securityRestrictPcs);
+      if (securityRestrictPcs) {
+        // Auto-autorizar esta PC actual para evitar bloqueo inmediato del administrador
+        const expectedToken = generateAuthToken(ADMIN_PASSWORD);
+        localStorage.setItem('asistencia_pc_auth_token', expectedToken);
+      }
+    }
+    validateDeviceSecurity();
 
     showToast('success', 'Configuración guardada ✅', `${urlMessage} Tolerancia de tardanza establecida en ${tardinessTolerance} minutos.`);
     
@@ -2381,9 +2402,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
       salidaReal: '---',
       breakSeconds: 0,
       workedSeconds: 0,
-      status: justification ? justification.type : (isHoliday ? 'Feriado' : (daySched.isRestDay ? 'Descanso' : 'Falta')),
+      status: justification ? justification.type : (isHoliday ? 'Feriado' : (daySched.isRestDay ? 'Descanso' : (isFlexible ? 'No laboró' : 'Falta'))),
       diffSeconds: 0,
-      diffClass: daySched.isRestDay || isHoliday || justification ? 'diff-neutral' : 'diff-negative',
+      diffClass: daySched.isRestDay || isHoliday || justification || isFlexible ? 'diff-neutral' : 'diff-negative',
       tardiness: false,
       breakMinutes: 0,
       workedMinutes: 0,
@@ -4530,6 +4551,7 @@ function renderMonthlyTable(history) {
 
   dnis.forEach(dni => {
     const employee = employeesDatabase[dni];
+    const isFlexible = (employee.workStart === "-" || employee.workStart === "—" || employee.weeklySchedule === "flexible");
     
     let diasLaborables = 0;
     let diasAsistidos = 0;
@@ -4637,7 +4659,7 @@ function renderMonthlyTable(history) {
           totalWorkedSeconds += report.workedSeconds;
         }
       } else {
-        if (isWorkday && isPastOrToday) {
+        if (isWorkday && isPastOrToday && !isFlexible) {
           const justification = justificacionesDatabase.find(j => 
             String(j.dni) === String(dni) && 
             normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
@@ -4738,6 +4760,7 @@ function exportMonthlyExcel() {
   const dnis = Object.keys(employeesDatabase);
   dnis.forEach(dni => {
     const employee = employeesDatabase[dni];
+    const isFlexible = (employee.workStart === "-" || employee.workStart === "—" || employee.weeklySchedule === "flexible");
     
     let diasLaborables = 0;
     let diasAsistidos = 0;
@@ -4813,7 +4836,7 @@ function exportMonthlyExcel() {
         
         if (report.workedSeconds > 0) totalWorkedSeconds += report.workedSeconds;
       } else {
-        if (isWorkday) {
+        if (isWorkday && !isFlexible) {
           const justification = justificacionesDatabase.find(j => 
             String(j.dni) === String(dni) && 
             normalizeDateStr(j.dateStr) === normalizeDateStr(dateStr)
@@ -5752,4 +5775,185 @@ function openAgentHistoryModal(isCurrentMonth = true) {
   }
 
   tbody.innerHTML = html;
+}
+
+// ==========================================
+// SECURITY / DEVICE RESTRICTIONS
+// ==========================================
+let securityBlockMobile = false;
+let securityRestrictPcs = false;
+
+function generateAuthToken(password) {
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return 'pc_authorized_' + Math.abs(hash).toString(36);
+}
+
+function loadSecuritySettings() {
+  securityBlockMobile = localStorage.getItem('security_block_mobile') === 'true';
+  securityRestrictPcs = localStorage.getItem('security_restrict_pcs') === 'true';
+  
+  const chkMobile = document.getElementById('chk-block-mobile');
+  const chkPcs = document.getElementById('chk-restrict-pcs');
+  if (chkMobile) chkMobile.checked = securityBlockMobile;
+  if (chkPcs) chkPcs.checked = securityRestrictPcs;
+}
+
+function validateDeviceSecurity() {
+  const isMobile = /mobile|android|iphone|ipad|tablet/i.test(navigator.userAgent);
+  const blockScreen = document.getElementById('security-block-screen');
+  const blockTitle = document.getElementById('security-title');
+  const blockMessage = document.getElementById('security-message');
+  const blockIcon = document.getElementById('security-icon');
+  const blockIconContainer = document.getElementById('security-icon-container');
+  const authFormContainer = document.getElementById('security-auth-form-container');
+  const btnShowAuth = document.getElementById('btn-security-show-auth');
+  const btnCancelAuth = document.getElementById('btn-security-cancel-auth');
+  
+  if (!blockScreen) return false;
+  
+  // Case 1: Mobile Lockout
+  if (securityBlockMobile && isMobile) {
+    blockTitle.textContent = "Dispositivo No Autorizado";
+    blockMessage.innerHTML = "🚫 Por motivos de seguridad y control interno, <strong>el acceso al sistema desde celulares y tablets está bloqueado</strong>.<br><br>Por favor, utilice la computadora de escritorio designada en la oficina.";
+    blockIcon.textContent = "smartphone";
+    if (blockIconContainer) {
+      blockIconContainer.style.borderColor = "#ef4444";
+      blockIconContainer.style.background = "rgba(239, 68, 68, 0.1)";
+    }
+    blockIcon.style.color = "#ef4444";
+    
+    if (btnShowAuth) btnShowAuth.style.display = "none";
+    if (authFormContainer) authFormContainer.style.display = "none";
+    
+    blockScreen.classList.remove('hidden');
+    blockScreen.style.display = "flex";
+    return true; // blocked
+  }
+  
+  // Case 2: Restricted PCs
+  if (securityRestrictPcs) {
+    const expectedToken = generateAuthToken(ADMIN_PASSWORD);
+    const currentToken = localStorage.getItem('asistencia_pc_auth_token');
+    
+    if (currentToken !== expectedToken) {
+      blockTitle.textContent = "Computadora No Registrada";
+      blockMessage.innerHTML = "🖥️ Esta computadora <strong>no cuenta con autorización</strong> para registrar asistencia en este terminal.<br><br>Pídale al administrador que autorice este navegador ingresando la contraseña.";
+      blockIcon.textContent = "desktop_access_disabled";
+      if (blockIconContainer) {
+        blockIconContainer.style.borderColor = "#f59e0b";
+        blockIconContainer.style.background = "rgba(245, 158, 11, 0.1)";
+      }
+      blockIcon.style.color = "#f59e0b";
+      
+      if (btnShowAuth) btnShowAuth.style.display = "inline-flex";
+      
+      blockScreen.classList.remove('hidden');
+      blockScreen.style.display = "flex";
+      return true; // blocked
+    }
+  }
+  
+  // No block active
+  blockScreen.classList.add('hidden');
+  blockScreen.style.display = "none";
+  return false;
+}
+
+function setupDeviceSecurityUIListeners() {
+  const btnShowAuth = document.getElementById('btn-security-show-auth');
+  const btnCancelAuth = document.getElementById('btn-security-cancel-auth');
+  const authFormContainer = document.getElementById('security-auth-form-container');
+  const btnSubmitAuth = document.getElementById('btn-submit-pc-authorization');
+  const inputPass = document.getElementById('input-security-admin-pass');
+  const errMsg = document.getElementById('security-admin-error-msg');
+  
+  const btnAuthorizePC = document.getElementById('btn-authorize-pc');
+  const btnRevokePCs = document.getElementById('btn-revoke-pcs');
+  
+  if (btnShowAuth && authFormContainer) {
+    btnShowAuth.addEventListener('click', () => {
+      authFormContainer.style.display = 'block';
+      authFormContainer.classList.remove('hidden');
+      btnShowAuth.style.display = 'none';
+      if (btnCancelAuth) {
+        btnCancelAuth.style.display = 'inline-flex';
+        btnCancelAuth.classList.remove('hidden');
+      }
+      if (inputPass) {
+        inputPass.value = '';
+        inputPass.focus();
+      }
+    });
+  }
+  
+  if (btnCancelAuth && authFormContainer && btnShowAuth) {
+    btnCancelAuth.addEventListener('click', () => {
+      authFormContainer.style.display = 'none';
+      authFormContainer.classList.add('hidden');
+      btnShowAuth.style.display = 'inline-flex';
+      btnCancelAuth.style.display = 'none';
+      btnCancelAuth.classList.add('hidden');
+      if (errMsg) {
+        errMsg.style.display = 'none';
+        errMsg.classList.add('hidden');
+      }
+    });
+  }
+  
+  if (btnSubmitAuth && inputPass) {
+    btnSubmitAuth.addEventListener('click', () => {
+      const pass = inputPass.value;
+      if (pass === ADMIN_PASSWORD) {
+        const token = generateAuthToken(ADMIN_PASSWORD);
+        localStorage.setItem('asistencia_pc_auth_token', token);
+        showToast('success', 'Dispositivo Autorizado ✅', 'Esta computadora ahora está autorizada para registrar asistencia.');
+        if (errMsg) {
+          errMsg.style.display = 'none';
+          errMsg.classList.add('hidden');
+        }
+        validateDeviceSecurity();
+      } else {
+        if (errMsg) {
+          errMsg.style.display = 'block';
+          errMsg.classList.remove('hidden');
+        }
+      }
+    });
+    
+    inputPass.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        btnSubmitAuth.click();
+      }
+    });
+  }
+  
+  // Admin panel manual buttons
+  if (btnAuthorizePC) {
+    btnAuthorizePC.addEventListener('click', () => {
+      const token = generateAuthToken(ADMIN_PASSWORD);
+      localStorage.setItem('asistencia_pc_auth_token', token);
+      showToast('success', 'Computadora Autorizada ✅', 'Este navegador ha sido autorizado manualmente.');
+    });
+  }
+  
+  if (btnRevokePCs) {
+    btnRevokePCs.addEventListener('click', async () => {
+      const confirm = await showCustomConfirm({
+        title: 'Revocar Accesos',
+        message: '⚠️ ¿Estás seguro de que deseas desautorizar todas las computadoras?<br><br>Esta acción revocará la autorización de todos los dispositivos y deberás ingresar la contraseña en cada PC de nuevo.',
+        type: 'danger',
+        acceptText: 'Desautorizar'
+      });
+      if (confirm) {
+        localStorage.removeItem('asistencia_pc_auth_token');
+        showToast('success', 'Accesos Revocados', 'Todos los accesos locales de PC han sido removidos.');
+        validateDeviceSecurity();
+      }
+    });
+  }
 }
