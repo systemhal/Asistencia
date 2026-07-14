@@ -702,7 +702,36 @@
                           <option value="Vacaciones">Vacaciones</option>
                           <option value="Descanso Médico">Descanso Médico</option>
                           <option value="Permiso Justificado">Permiso Justificado</option>
+                          <option value="Permiso por Horas">Permiso por Horas</option>
                           <option value="Suspensión">Suspensión</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Contenedor para campos específicos de Permiso por Horas -->
+                  <div id="just-hours-container" class="hidden" style="display: none; grid-template-columns: 1fr 1fr 1.2fr; gap: 13px; margin-top: 10px; margin-bottom: 15px; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: var(--radius-md); border: 1px dashed var(--border-color);">
+                    <div class="input-group" style="margin-bottom: 0;">
+                      <label for="just-start-time" style="font-size: 0.85rem; color: var(--text-secondary);">Hora Inicio</label>
+                      <div class="input-wrapper">
+                        <span class="material-symbols-rounded input-icon" style="font-size: 18px;">schedule</span>
+                        <input type="time" id="just-start-time" style="width: 100%; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px 8px 36px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline:none; box-sizing: border-box;">
+                      </div>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                      <label for="just-end-time" style="font-size: 0.85rem; color: var(--text-secondary);">Hora Fin</label>
+                      <div class="input-wrapper">
+                        <span class="material-symbols-rounded input-icon" style="font-size: 18px;">schedule</span>
+                        <input type="time" id="just-end-time" style="width: 100%; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px 8px 36px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline:none; box-sizing: border-box;">
+                      </div>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 0;">
+                      <label for="just-compensation" style="font-size: 0.85rem; color: var(--text-secondary);">Compensación</label>
+                      <div class="input-wrapper select-wrapper">
+                        <span class="material-symbols-rounded input-icon" style="font-size: 18px;">payments</span>
+                        <select id="just-compensation" style="width: 100%; background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 10px 8px 36px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline:none; -webkit-appearance: none;">
+                          <option value="Con goce">Con goce de haber</option>
+                          <option value="Sin goce">Sin goce de haber</option>
                         </select>
                       </div>
                     </div>

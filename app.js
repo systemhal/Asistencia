@@ -1428,14 +1428,56 @@ function setupEventListeners() {
 
   // Gestión de Justificaciones Submit
   const formRegisterJustification = document.getElementById('form-register-justification');
+  const justType = document.getElementById('just-type');
+  const justHoursContainer = document.getElementById('just-hours-container');
+  const justStartTime = document.getElementById('just-start-time');
+  const justEndTime = document.getElementById('just-end-time');
+  const justCompensation = document.getElementById('just-compensation');
+
+  if (justType && justHoursContainer) {
+    justType.addEventListener('change', () => {
+      if (justType.value === 'Permiso por Horas') {
+        justHoursContainer.style.display = 'grid';
+        justHoursContainer.classList.remove('hidden');
+        if (justStartTime) justStartTime.required = true;
+        if (justEndTime) justEndTime.required = true;
+      } else {
+        justHoursContainer.style.display = 'none';
+        justHoursContainer.classList.add('hidden');
+        if (justStartTime) { justStartTime.required = false; justStartTime.value = ''; }
+        if (justEndTime) { justEndTime.required = false; justEndTime.value = ''; }
+      }
+    });
+  }
+
   if (formRegisterJustification) {
     formRegisterJustification.addEventListener('submit', (e) => {
       e.preventDefault();
       const dni = document.getElementById('just-employee').value;
       const dateVal = document.getElementById('just-date').value; // YYYY-MM-DD
-      const type = document.getElementById('just-type').value;
+      const type = justType ? justType.value : '';
       const details = document.getElementById('just-details').value.trim();
       
+      let startTime = '';
+      let endTime = '';
+      let compensation = '';
+
+      if (type === 'Permiso por Horas') {
+        startTime = justStartTime ? justStartTime.value : '';
+        endTime = justEndTime ? justEndTime.value : '';
+        compensation = justCompensation ? justCompensation.value : 'Con goce';
+
+        if (!startTime || !endTime) {
+          showToast('warning', 'Campos incompletos', 'Por favor complete las horas del permiso.');
+          return;
+        }
+
+        if (timeStrToSeconds(startTime) >= timeStrToSeconds(endTime)) {
+          showToast('error', 'Horario inválido', 'La hora de inicio debe ser menor que la hora de fin.');
+          return;
+        }
+      }
+
       if (!dni || !dateVal || !type || !details) {
         showToast('warning', 'Campos incompletos', 'Por favor rellene todos los campos.');
         return;
@@ -1445,13 +1487,19 @@ function setupEventListeners() {
       const parts = dateVal.split('-');
       const dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
       
-      registerJustificacion(dni, dateStr, type, details);
+      registerJustificacion(dni, dateStr, type, details, startTime, endTime, compensation);
       
       // Limpiar campos del formulario
       document.getElementById('just-date').value = '';
-      document.getElementById('just-type').value = '';
+      if (justType) justType.value = '';
       document.getElementById('just-details').value = '';
       document.getElementById('just-employee').value = '';
+      if (justStartTime) { justStartTime.value = ''; justStartTime.required = false; }
+      if (justEndTime) { justEndTime.value = ''; justEndTime.required = false; }
+      if (justHoursContainer) {
+        justHoursContainer.style.display = 'none';
+        justHoursContainer.classList.add('hidden');
+      }
     });
   }
 
@@ -2387,7 +2435,29 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  const isRestDayOrHolidayOrJustified = daySched.isRestDay || isHoliday || !!justification;
+  // Clonar para evitar mutar el horario original de la distribución
+  daySched = JSON.parse(JSON.stringify(daySched));
+
+  const isPartialPerm = justification && justification.type === "Permiso por Horas" && justification.startTime && justification.endTime;
+  const isRestDayOrHolidayOrJustified = daySched.isRestDay || isHoliday || (justification && !isPartialPerm);
+
+  let permDurationSecs = 0;
+  if (isPartialPerm) {
+    const permStartSecs = timeStrToSeconds(justification.startTime);
+    const permEndSecs = timeStrToSeconds(justification.endTime);
+    permDurationSecs = Math.max(0, permEndSecs - permStartSecs);
+    const schedStartSecs = timeStrToSeconds(daySched.workStart || "08:00");
+    const schedEndSecs = timeStrToSeconds(daySched.workEnd || "17:00");
+    
+    // Si el permiso cubre el inicio de la jornada, ajustar el horario de entrada
+    if (permStartSecs <= schedStartSecs && permEndSecs > schedStartSecs) {
+      daySched.workStart = justification.endTime;
+    }
+    // Si el permiso cubre el fin de la jornada, ajustar el horario de salida
+    if (permEndSecs >= schedEndSecs && permStartSecs < schedEndSecs) {
+      daySched.workEnd = justification.startTime;
+    }
+  }
 
   const ingresoMark = historyForDate.find(h => h.action === 'Ingreso');
   const breakInMark = historyForDate.find(h => h.action === 'Inicio Refrigerio');
@@ -2402,9 +2472,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
       salidaReal: '---',
       breakSeconds: 0,
       workedSeconds: 0,
-      status: justification ? justification.type : (isHoliday ? 'Feriado' : (daySched.isRestDay ? 'Descanso' : (isFlexible ? 'No laboró' : 'Falta'))),
+      status: justification && !isPartialPerm ? justification.type : (isHoliday ? 'Feriado' : (daySched.isRestDay ? 'Descanso' : (isFlexible ? 'No laboró' : 'Falta'))),
       diffSeconds: 0,
-      diffClass: daySched.isRestDay || isHoliday || justification || isFlexible ? 'diff-neutral' : 'diff-negative',
+      diffClass: daySched.isRestDay || isHoliday || (justification && !isPartialPerm) || isFlexible ? 'diff-neutral' : 'diff-negative',
       tardiness: false,
       breakMinutes: 0,
       workedMinutes: 0,
@@ -2474,6 +2544,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   }
 
   let workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
+  if (isPartialPerm && justification.compensation !== 'Sin goce') {
+    workedSeconds += permDurationSecs;
+  }
 
   // Expectativas teóricas
   let expectedWorkSeconds = 0;
@@ -2491,6 +2564,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     const expectedEnd = timeStrToSeconds(daySched.workEnd || "17:00");
     const totalShiftSeconds = Math.max(0, expectedEnd - expectedStart);
     expectedWorkSeconds = isRestDayOrHolidayOrJustified ? 0 : Math.max(0, (daySched.expectedHours || 8) * 3600);
+    if (isPartialPerm && justification.compensation === 'Sin goce') {
+      expectedWorkSeconds = Math.max(0, expectedWorkSeconds - permDurationSecs);
+    }
     expectedBreakSeconds = isRestDayOrHolidayOrJustified || daySched.nobreak ? 0 : Math.max(0, totalShiftSeconds - expectedWorkSeconds);
 
     if (isAutoClose) {
@@ -4267,7 +4343,11 @@ function renderDailySummaryTable(history) {
         tardinessDisplay = isFlexible ? '---' : '0 min';
         statusBadge = `<span class="table-status-badge Ingreso">Asistió</span>`;
       }
-      
+      if (justification && justification.type === 'Permiso por Horas') {
+        const compStr = justification.compensation === 'Sin goce' ? 'Sin goce' : 'Con goce';
+        statusBadge = `<span class="table-status-badge Inicio-Refrigerio" style="background: rgba(30, 144, 255, 0.1); color: #1e90ff; border-color: rgba(30, 144, 255, 0.3);" title="Permiso de ${justification.startTime} a ${justification.endTime} (${compStr}) - ${justification.details}">Asistió (Permiso)</span>`;
+        rowClass = 'row-justified';
+      }
       if (isFlexible) {
         statusBadge = `<span class="table-status-badge Fin-Refrigerio">Asistió (Flexible)</span>`;
       }
@@ -4930,11 +5010,22 @@ function renderJustificacionesTable() {
   tbody.innerHTML = '';
   justificacionesDatabase.forEach(item => {
     const employee = employeesDatabase[item.dni] || { name: `DNI: ${item.dni}` };
+    let typeBadge = `<span class="badge" style="background: var(--bg-inner); color: var(--text-primary); font-weight: 500; padding: 4px 8px; border-radius: 4px;">${item.type}</span>`;
+    if (item.type === 'Permiso por Horas' && item.startTime && item.endTime) {
+      const compLabel = item.compensation === 'Sin goce' ? 'Sin goce' : 'Con goce';
+      const compColor = item.compensation === 'Sin goce' ? '#f59e0b' : '#10b981';
+      typeBadge = `<div style="display: flex; flex-direction: column; gap: 4px;">
+        <span class="badge" style="background: rgba(30, 144, 255, 0.1); color: #1e90ff; font-weight: 600; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; width: fit-content;">Permiso por Horas</span>
+        <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">⏱️ ${item.startTime} a ${item.endTime}</span>
+        <span style="font-size: 0.75rem; color: ${compColor}; font-weight: 600;">${compLabel}</span>
+      </div>`;
+    }
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${employee.name}</td>
       <td class="text-center">${item.dateStr}</td>
-      <td><span class="badge" style="background: var(--bg-inner); color: var(--text-primary); font-weight: 500; padding: 4px 8px; border-radius: 4px;">${item.type}</span></td>
+      <td>${typeBadge}</td>
       <td class="text-center">
         <button class="btn-delete-justification btn-table-action" data-dni="${item.dni}" data-date="${item.dateStr}" style="padding: 4px 8px; font-size: 0.8rem; border-color: rgba(220, 20, 60, 0.4); color: #ff4d4d; display: inline-flex; align-items: center; gap: 4px; background: transparent; cursor: pointer; border: 1px solid var(--border-color); border-radius: 4px;">
           <span class="material-symbols-rounded" style="font-size: 14px;">delete</span>
@@ -5048,17 +5139,20 @@ function renderFeriadosTable() {
   });
 }
 
-function registerJustificacion(dni, dateStr, type, details) {
+function registerJustificacion(dni, dateStr, type, details, startTime = '', endTime = '', compensation = '') {
   const payload = {
     action: "Registrar_Justificacion",
     employeeId: dni,
     date: dateStr,
     type: type,
-    details: details
+    details: details,
+    startTime: startTime,
+    endTime: endTime,
+    compensation: compensation
   };
 
   justificacionesDatabase = justificacionesDatabase.filter(j => !(j.dni === dni && j.dateStr === dateStr));
-  justificacionesDatabase.push({ dni, dateStr, type, details });
+  justificacionesDatabase.push({ dni, dateStr, type, details, startTime, endTime, compensation });
   localStorage.setItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
   renderJustificacionesTable();
 
@@ -5739,6 +5833,10 @@ function openAgentHistoryModal(isCurrentMonth = true) {
       } else {
         tardinessDisplay = isFlexible ? '---' : '0 min';
         statusBadge = `<span class="table-status-badge Ingreso">Asistió</span>`;
+      }
+      if (justification && justification.type === 'Permiso por Horas') {
+        const compStr = justification.compensation === 'Sin goce' ? 'Sin goce' : 'Con goce';
+        statusBadge = `<span class="table-status-badge Inicio-Refrigerio" style="background: rgba(30, 144, 255, 0.1); color: #1e90ff; border-color: rgba(30, 144, 255, 0.3);" title="Permiso de ${justification.startTime} a ${justification.endTime} (${compStr}) - ${justification.details}">Asistió (Permiso)</span>`;
       }
       if (isFlexible) {
         statusBadge = `<span class="table-status-badge Fin-Refrigerio">Asistió (Flex)</span>`;
