@@ -1602,8 +1602,10 @@ function setupEventListeners() {
 }
 
 // Post attendance payload to Google Apps Script Web App
-function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null) {
-  showToast('warning', 'Sincronizando...', 'Enviando marca de asistencia a Google Sheets.');
+function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, silent = false) {
+  if (!silent) {
+    showToast('warning', 'Sincronizando...', 'Enviando marca de asistencia a Google Sheets.');
+  }
   
   const payload = {
     action: action,
@@ -1621,23 +1623,24 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null) {
     payload.device = "Sistema";
   }
   
-  // We use cors mode 'no-cors' if standard post fails, but standard JSON payload requires standard fetch.
-  // Since Google Apps Script redirects with a 302, standard fetch needs simple redirect handling (which fetch handles automatically).
   fetch(googleScriptUrl, {
     method: 'POST',
-    mode: 'no-cors', // essential for Google Apps Script cross-origin redirection without complex CORS headers
+    mode: 'no-cors',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
   })
   .then(() => {
-    // Note: with 'no-cors', the response type is opaque, and we cannot read response details, but the transmission succeeds!
-    showToast('success', 'Sincronización Exitosa', `Se registró '${action}' en tu Google Sheet.`);
+    if (!silent) {
+      showToast('success', 'Sincronización Exitosa', `Se registró '${action}' en tu Google Sheet.`);
+    }
   })
   .catch(err => {
     console.error('Error post sheet:', err);
-    showToast('error', 'Error de Conexión', 'No se pudo escribir en el Sheet. Se guardó localmente.');
+    if (!silent) {
+      showToast('error', 'Error de Conexión', 'No se pudo escribir en el Sheet. Se guardó localmente.');
+    }
   });
 }
 
@@ -2114,7 +2117,7 @@ function autoClosePendingSessions() {
           };
           state.history.push(breakLog);
           if (googleScriptUrl) {
-            sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Fin Refrigerio', breakTime);
+            sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Fin Refrigerio', breakTime, true);
           }
         }
 
@@ -2133,7 +2136,7 @@ function autoClosePendingSessions() {
         state.timestamp = exitTime.getTime();
 
         if (googleScriptUrl) {
-          sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Salida', exitTime);
+          sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Salida', exitTime, true);
         }
 
         stateChanged = true;
@@ -2915,6 +2918,12 @@ function updateReportEmployeeSelect() {
   if (select) {
     const currentVal = select.value;
     select.innerHTML = '<option value="" disabled selected hidden>Seleccionar colaborador...</option>';
+    
+    const optAll = document.createElement('option');
+    optAll.value = "all";
+    optAll.textContent = "[Todos los Colaboradores]";
+    select.appendChild(optAll);
+    
     Object.keys(employeesDatabase).forEach(dni => {
       const employee = employeesDatabase[dni];
       const opt = document.createElement('option');
@@ -2968,6 +2977,45 @@ function renderAgentReport(dni) {
   const summaryDiv = document.getElementById('report-schedule-summary');
   if (!tbody || !summaryDiv) return;
 
+  if (dni === "all") {
+    // Configurar título del reporte
+    const titleDiv = document.getElementById('report-employee-title');
+    const nameDisplay = document.getElementById('report-employee-name-display');
+    if (titleDiv && nameDisplay) {
+      nameDisplay.textContent = "Todos los Colaboradores";
+      titleDiv.classList.remove('hidden');
+    }
+
+    // Cabecera formal
+    const printName = document.getElementById('print-emp-name');
+    const printDni = document.getElementById('print-emp-dni');
+    const printRole = document.getElementById('print-emp-role');
+    if (printName && printDni && printRole) {
+      printName.textContent = "Todos los Colaboradores";
+      printDni.textContent = "TODOS";
+      printRole.textContent = "VARIOS";
+    }
+
+    // Ocultar resumen de un solo colaborador
+    summaryDiv.style.display = 'none';
+
+    // Consolidar historial
+    const allHistory = [];
+    Object.keys(employeesDatabase).forEach(empDni => {
+      const state = attendanceState[empDni] || { history: [] };
+      (state.history || []).forEach(item => {
+        allHistory.push({ ...item, dni: empDni });
+      });
+    });
+
+    cachedAgentHistory = allHistory;
+    renderReportTable(cachedAgentHistory, "all");
+    return;
+  }
+
+  // Mostrar el resumen del horario para un agente específico
+  summaryDiv.style.display = 'flex';
+
   const employee = employeesDatabase[dni];
   if (!employee) {
     tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">Colaborador no encontrado.</td></tr>';
@@ -3003,14 +3051,32 @@ function renderAgentReport(dni) {
 // Función auxiliar para construir la tabla del reporte
 function renderReportTable(history, employee) {
   const tbody = document.getElementById('admin-report-table-body');
-  if (!tbody) return;
+  const thead = document.querySelector('#tab-reports-content table thead');
+  if (!tbody || !thead) return;
+
+  const isAll = (employee === "all");
 
   if (!history || history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">No se registran marcas de asistencia históricas para este colaborador.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">No se registran marcas de asistencia históricas.</td></tr>';
     return;
   }
 
-  // Normalizar marcas del historial y calcular timestamps a partir de la fecha y hora
+  // Las cabeceras siempre son las mismas 9 columnas originales (Cabecera Estática)
+  thead.innerHTML = `
+    <tr>
+      <th>Fecha</th>
+      <th>Entrada</th>
+      <th>Tardanza</th>
+      <th>Refrigerio (Inicio &rarr; Fin)</th>
+      <th>Salida</th>
+      <th>Horas Adicionales</th>
+      <th>Refrigerio (Total)</th>
+      <th>Trabajo Real</th>
+      <th>Diferencia</th>
+    </tr>
+  `;
+
+  // Normalizar marcas del historial y calcular timestamps
   const normalizedHistory = history.map(item => {
     const normDate = normalizeDateStr(item.dateStr);
     const normTime = normalizeTimeStr(item.timeStr);
@@ -3032,85 +3098,230 @@ function renderReportTable(history, employee) {
   });
 
   if (filteredHistory.length === 0) {
-    // Actualizar resumen al filtrar aunque no haya marcas
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">No hay marcas en el rango de fechas seleccionado.</td></tr>';
+    return;
+  }
+
+  // Actualizar resumen de horario superior (solo para agente único)
+  if (!isAll) {
     if (startDate) {
       const parts = startDate.split('-');
       if (parts.length === 3) {
         const refDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
         if (!isNaN(refDate.getTime())) {
-          updateScheduleSummary(employee, refDate);
+          if (startDate === endDate || !endDate) {
+            updateScheduleSummary(employee, refDate);
+          } else {
+            updateScheduleSummary(employee, refDate, 'Desde');
+          }
         }
       }
+    } else {
+      updateScheduleSummary(employee, new Date());
     }
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 25px;">No hay marcas registradas para el rango de fechas seleccionado.</td></tr>';
-    return;
   }
-
-  // Agrupar por fecha
-  const groupedByDate = {};
-  filteredHistory.forEach(item => {
-    if (!groupedByDate[item.dateStr]) {
-      groupedByDate[item.dateStr] = [];
-    }
-    groupedByDate[item.dateStr].push(item);
-  });
-
-  // Ordenar fechas descendente
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
-    const partsA = a.split('/');
-    const partsB = b.split('/');
-    const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
-    const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
-    return dateB - dateA;
-  });
-
-  // Actualizar resumen de horario según la fecha filtrada
-  if (startDate) {
-    const parts = startDate.split('-'); // yyyy-mm-dd
-    if (parts.length === 3) {
-      const refDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      if (!isNaN(refDate.getTime())) {
-        // Si el rango es un solo día, mostrar ese día específico
-        if (startDate === endDate || !endDate) {
-          updateScheduleSummary(employee, refDate);
-        } else {
-          // Si es rango de varios días, mostrar el primer día del filtro
-          updateScheduleSummary(employee, refDate, 'Desde');
-        }
-      }
-    }
-  } else {
-    // Sin filtro, mostrar horario de hoy
-    updateScheduleSummary(employee, new Date());
-  }
-
 
   tbody.innerHTML = '';
-  sortedDates.forEach(dateStr => {
 
-    const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
-    const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
-    
-    const excessBreakBadge = report.hasExcessBreak 
-      ? `<span class="badge-excess-break"><span class="material-symbols-rounded">warning</span>Exceso: ${report.excessBreakMinutes}m</span>` 
-      : '';
+  if (isAll) {
+    // MODO TODOS: Agrupar historial por DNI
+    const historyByEmployee = {};
+    filteredHistory.forEach(item => {
+      if (!historyByEmployee[item.dni]) {
+        historyByEmployee[item.dni] = [];
+      }
+      historyByEmployee[item.dni].push(item);
+    });
 
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="font-weight: 600;">${dateStr}</td>
-      <td class="table-timestamp text-center" style="white-space: nowrap;">${report.entradaReal}${getDeviceIconShortHTML(report.entradaDevice)}</td>
-      <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
-      <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
-      <td class="table-timestamp text-center" style="white-space: nowrap;">${report.salidaReal}${getDeviceIconShortHTML(report.salidaDevice)}</td>
-      <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
-      <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}${excessBreakBadge}</td>
-      <td class="text-center" style="font-weight: 600; color: var(--text-primary); white-space: nowrap;">${report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00'}</td>
-      <td class="text-center" style="white-space: nowrap;">
-        <span class="${report.diffClass}">${report.status}</span>
-      </td>
+    // Ordenar colaboradores alfabéticamente
+    const sortedDnis = Object.keys(historyByEmployee).sort((a, b) => {
+      const nameA = employeesDatabase[a]?.name || '';
+      const nameB = employeesDatabase[b]?.name || '';
+      return nameA.localeCompare(nameB);
+    });
+
+    // Renderizar grupo por colaborador
+    sortedDnis.forEach(empDni => {
+      const emp = employeesDatabase[empDni];
+      if (!emp) return;
+
+      const empHistory = historyByEmployee[empDni];
+
+      // Agrupar marcas de este colaborador por fecha
+      const groupedByDate = {};
+      empHistory.forEach(item => {
+        if (!groupedByDate[item.dateStr]) groupedByDate[item.dateStr] = [];
+        groupedByDate[item.dateStr].push(item);
+      });
+
+      // Ordenar fechas descendente
+      const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+        const partsA = a.split('/');
+        const partsB = b.split('/');
+        const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
+        const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
+        return dateB - dateA;
+      });
+
+      // Calcular Totales
+      let totalWorkedSecs = 0;
+      let totalTardySecs = 0;
+      let totalOvertimeSecs = 0;
+      let totalBreakSecs = 0;
+      let totalDiffSecs = 0;
+
+      const empReports = [];
+      sortedDates.forEach(dateStr => {
+        const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
+        const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
+        empReports.push({ dateStr, report });
+
+        totalWorkedSecs += report.workedSeconds;
+        totalTardySecs += report.tardinessSeconds;
+        totalOvertimeSecs += report.horasAdicionalesSeconds;
+        totalBreakSecs += report.breakSeconds;
+        totalDiffSecs += report.diffSeconds;
+      });
+
+      // Añadir fila resumen del colaborador (Colapsada por defecto)
+      const scheduledBreakStr = `	h${emp.breakStart || "13:00"} - ${emp.breakEnd || "14:00"}`.replace('\t', '');
+      const summaryTr = document.createElement('tr');
+      summaryTr.classList.add('summary-row');
+      summaryTr.setAttribute('data-emp-dni', empDni);
+      summaryTr.style.backgroundColor = 'var(--bg-secondary)';
+      summaryTr.style.fontWeight = '700';
+      summaryTr.style.cursor = 'pointer';
+      
+      summaryTr.innerHTML = `
+        <td style="color: var(--text-primary); text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 6px; border-bottom: none;">
+          <span class="material-symbols-rounded toggle-icon" style="font-size: 18px; transition: transform 0.2s; color: var(--text-secondary);">chevron_right</span>
+          <span>${emp.name}</span>
+        </td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${emp.workStart || "08:00"}</td>
+        <td class="text-center" style="color: #ff4d4d; font-weight: 700;">${totalTardySecs > 0 ? formatSecondsToHHMMSS(totalTardySecs) : '00:00:00'}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${scheduledBreakStr}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${emp.workEnd || "18:00"}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${totalOvertimeSecs > 0 ? formatSecondsToHHMMSS(totalOvertimeSecs) : '00:00:00'}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${totalBreakSecs > 0 ? formatSecondsToHHMMSS(totalBreakSecs) : '00:00:00'}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${totalWorkedSecs > 0 ? formatSecondsToHHMMSS(totalWorkedSecs) : '00:00:00'}</td>
+        <td class="text-center">
+          <span class="${totalDiffSecs > 0 ? 'diff-positive' : (totalDiffSecs < 0 ? 'diff-negative' : 'diff-neutral')}">
+            ${totalDiffSecs > 0 ? '+' : ''}${formatSecondsToHHMMSS(totalDiffSecs)}
+          </span>
+        </td>
+      `;
+      tbody.appendChild(summaryTr);
+
+      // Renderizar días individuales (Ocultos por defecto)
+      empReports.forEach(({ dateStr, report }) => {
+        const excessBreakBadge = report.hasExcessBreak 
+          ? `<span class="badge-excess-break"><span class="material-symbols-rounded">warning</span>Exceso: ${report.excessBreakMinutes}m</span>` 
+          : '';
+
+        const tr = document.createElement('tr');
+        tr.classList.add(`history-row-emp-${empDni}`);
+        tr.style.display = 'none'; // oculto al inicio en modo Todos
+        tr.innerHTML = `
+          <td style="font-weight: 600; padding-left: 24px;">${dateStr}</td>
+          <td class="table-timestamp text-center" style="white-space: nowrap;">${report.entradaReal}${getDeviceIconShortHTML(report.entradaDevice)}</td>
+          <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
+          <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
+          <td class="table-timestamp text-center" style="white-space: nowrap;">${report.salidaReal}${getDeviceIconShortHTML(report.salidaDevice)}</td>
+          <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
+          <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}${excessBreakBadge}</td>
+          <td class="text-center" style="font-weight: 600; color: var(--text-primary); white-space: nowrap;">${report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00'}</td>
+          <td class="text-center" style="white-space: nowrap;">
+            <span class="${report.diffClass}">${report.status}</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+
+  } else {
+    // MODO INDIVIDUAL: Agrupar por fecha
+    const groupedByDate = {};
+    filteredHistory.forEach(item => {
+      if (!groupedByDate[item.dateStr]) groupedByDate[item.dateStr] = [];
+      groupedByDate[item.dateStr].push(item);
+    });
+
+    const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+      const partsA = a.split('/');
+      const partsB = b.split('/');
+      const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
+      const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
+      return dateB - dateA;
+    });
+
+    // Calcular Totales individuales
+    let totalWorkedSecs = 0;
+    let totalTardySecs = 0;
+    let totalOvertimeSecs = 0;
+    let totalBreakSecs = 0;
+    let totalDiffSecs = 0;
+
+    sortedDates.forEach(dateStr => {
+      const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
+      const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+      totalWorkedSecs += report.workedSeconds;
+      totalTardySecs += report.tardinessSeconds;
+      totalOvertimeSecs += report.horasAdicionalesSeconds;
+      totalBreakSecs += report.breakSeconds;
+      totalDiffSecs += report.diffSeconds;
+    });
+
+    // Insertar fila de Resumen y Horario Programado (Abierta por defecto en modo individual)
+    const scheduledBreakStr = `${employee.breakStart || "13:00"} - ${employee.breakEnd || "14:00"}`;
+    const summaryRowHtml = `
+      <tr class="summary-row expanded-group" data-emp-dni="${employee.dni}" style="background-color: var(--bg-secondary) !important; font-weight: 700; cursor: pointer;">
+        <td style="color: var(--text-primary); text-transform: uppercase; display: flex; align-items: center; gap: 6px; border-bottom: none; font-weight: 700;">
+          <span class="material-symbols-rounded toggle-icon" style="font-size: 18px; transition: transform 0.2s; color: var(--text-secondary); transform: rotate(90deg);">chevron_right</span>
+          <span>${employee.name}</span>
+        </td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${employee.workStart || "08:00"}</td>
+        <td class="text-center" style="color: #ff4d4d; font-weight: 700;">${totalTardySecs > 0 ? formatSecondsToHHMMSS(totalTardySecs) : '00:00:00'}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${scheduledBreakStr}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${employee.workEnd || "18:00"}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${totalOvertimeSecs > 0 ? formatSecondsToHHMMSS(totalOvertimeSecs) : '00:00:00'}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${totalBreakSecs > 0 ? formatSecondsToHHMMSS(totalBreakSecs) : '00:00:00'}</td>
+        <td class="text-center" style="font-weight: 700; color: var(--text-primary);">${totalWorkedSecs > 0 ? formatSecondsToHHMMSS(totalWorkedSecs) : '00:00:00'}</td>
+        <td class="text-center">
+          <span class="${totalDiffSecs > 0 ? 'diff-positive' : (totalDiffSecs < 0 ? 'diff-negative' : 'diff-neutral')} shadow-glow">
+            ${totalDiffSecs > 0 ? '+' : ''}${formatSecondsToHHMMSS(totalDiffSecs)}
+          </span>
+        </td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+    tbody.innerHTML = summaryRowHtml;
+
+    // Renderizar registros individuales
+    sortedDates.forEach(dateStr => {
+      const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
+      const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+      
+      const excessBreakBadge = report.hasExcessBreak 
+        ? `<span class="badge-excess-break"><span class="material-symbols-rounded">warning</span>Exceso: ${report.excessBreakMinutes}m</span>` 
+        : '';
+
+      const tr = document.createElement('tr');
+      tr.classList.add(`history-row-emp-${employee.dni}`); // agregamos clase para poder colapsar individual también
+      tr.innerHTML = `
+        <td style="font-weight: 600; padding-left: 24px;">${dateStr}</td>
+        <td class="table-timestamp text-center" style="white-space: nowrap;">${report.entradaReal}${getDeviceIconShortHTML(report.entradaDevice)}</td>
+        <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
+        <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
+        <td class="table-timestamp text-center" style="white-space: nowrap;">${report.salidaReal}${getDeviceIconShortHTML(report.salidaDevice)}</td>
+        <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
+        <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}<!--=-->${excessBreakBadge}</td>
+        <td class="text-center" style="font-weight: 600; color: var(--text-primary); white-space: nowrap;">${report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00'}</td>
+        <td class="text-center" style="white-space: nowrap;">
+          <span class="${report.diffClass}">${report.status}</span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
 }
 
 // --- Lógica del Reporte Consolidado (Resumen General) ---
@@ -3230,6 +3441,7 @@ function renderConsolidatedTable(history) {
   headerHtml += `
       <th class="text-center cell-total-worked" style="min-width: 120px;">Total Horas</th>
       <th class="text-center cell-total-tardy" style="min-width: 100px;">Tardanzas</th>
+      <th class="text-center cell-total-tardy-seconds" style="min-width: 120px;">Total Hrs. Tardanzas</th>
       <th class="text-center cell-total-absent" style="min-width: 100px;">Faltas</th>
     </tr>
   `;
@@ -3249,12 +3461,13 @@ function renderConsolidatedTable(history) {
     const tr = document.createElement('tr');
     
     let rowHtml = `
-      <td class="table-employee-name" style="font-weight: 500;">${employee.name}</td>
-      <td>${dni}</td>
+      <td class="table-employee-name" style="width: 220px; min-width: 220px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">${employee.name}</td>
+      <td style="width: 100px; min-width: 100px; max-width: 100px;">${dni}</td>
     `;
     
     let totalWorkedSeconds = 0;
     let totalTardinessCount = 0;
+    let totalTardinessSeconds = 0;
     let totalAbsentCount = 0;
 
     sortedDates.forEach(dateStr => {
@@ -3333,6 +3546,7 @@ function renderConsolidatedTable(history) {
         
         if (report.tardiness) {
           totalTardinessCount++;
+          totalTardinessSeconds += report.tardinessSeconds;
           const tardMins = Math.floor(report.tardinessSeconds / 60);
           tooltip += `\nTardanza: ${tardMins} min`;
           cellClass = 'cell-tardiness';
@@ -3368,6 +3582,7 @@ function renderConsolidatedTable(history) {
     rowHtml += `
       <td class="cell-total-worked">${formatSecondsToHHMMSS(totalWorkedSeconds)}</td>
       <td class="cell-total-tardy">${totalTardinessCount} tard.</td>
+      <td class="cell-total-tardy-seconds">${formatSecondsToHHMMSS(totalTardinessSeconds)}</td>
       <td class="cell-total-absent">${totalAbsentCount} faltas</td>
     `;
     
@@ -3458,6 +3673,36 @@ function setupAdminTabs() {
     });
   });
 
+  // Delegación de clicks para desplegar/colapsar filas en el reporte por agente
+  const reportTableBody = document.getElementById('admin-report-table-body');
+  if (reportTableBody) {
+    reportTableBody.addEventListener('click', (e) => {
+      const summaryRow = e.target.closest('tr.summary-row');
+      if (!summaryRow) return;
+
+      const empDni = summaryRow.getAttribute('data-emp-dni');
+      if (!empDni) return;
+
+      const isExpanded = summaryRow.classList.contains('expanded-group');
+      const detailRows = reportTableBody.querySelectorAll(`.history-row-emp-${empDni}`);
+      const icon = summaryRow.querySelector('.toggle-icon');
+
+      if (isExpanded) {
+        summaryRow.classList.remove('expanded-group');
+        if (icon) icon.style.transform = 'rotate(0deg)';
+        detailRows.forEach(row => {
+          row.style.display = 'none';
+        });
+      } else {
+        summaryRow.classList.add('expanded-group');
+        if (icon) icon.style.transform = 'rotate(90deg)';
+        detailRows.forEach(row => {
+          row.style.display = 'table-row';
+        });
+      }
+    });
+  }
+
   const select = document.getElementById('select-report-employee');
   if (select) {
     select.addEventListener('change', () => {
@@ -3525,10 +3770,15 @@ function setupAdminTabs() {
   if (btnFilterReport) {
     btnFilterReport.addEventListener('click', () => {
       if (select && select.value) {
-        const employee = employeesDatabase[select.value];
-        if (employee) {
-          renderReportTable(cachedAgentHistory, employee);
-          showToast('success', 'Filtro aplicado', 'Historial del agente filtrado.');
+        if (select.value === "all") {
+          renderAgentReport("all");
+          showToast('success', 'Filtro aplicado', 'Historial de todos los colaboradores filtrado.');
+        } else {
+          const employee = employeesDatabase[select.value];
+          if (employee) {
+            renderAgentReport(select.value);
+            showToast('success', 'Filtro aplicado', 'Historial del agente filtrado.');
+          }
         }
       } else {
         showToast('warning', 'Selecciona colaborador', 'Primero debes elegir un colaborador.');
@@ -3814,7 +4064,8 @@ function exportAgentReportExcel() {
     return;
   }
   const dni = select.value;
-  const employee = employeesDatabase[dni];
+  const isAll = (dni === "all");
+  const employee = isAll ? "all" : employeesDatabase[dni];
   if (!employee) return;
   
   if (!cachedAgentHistory || cachedAgentHistory.length === 0) {
@@ -3842,82 +4093,192 @@ function exportAgentReportExcel() {
     showToast('warning', 'Sin datos', 'No hay marcas en el rango de fechas seleccionado.');
     return;
   }
-  
-  // Agrupar por fecha
-  const grouped = {};
-  filteredHistory.forEach(item => {
-    if (!grouped[item.dateStr]) grouped[item.dateStr] = [];
-    grouped[item.dateStr].push(item);
-  });
-  
-  // Ordenar fechas descendente
-  const sortedDates = Object.keys(grouped).sort((a, b) => {
-    const partsA = a.split('/');
-    const partsB = b.split('/');
-    const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
-    const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
-    return dateB - dateA;
-  });
-  
-  // Crear libro de Excel
+
   const wb = XLSX.utils.book_new();
-  
   const rows = [];
-  rows.push(["Reporte de Asistencia Personalizado"]);
-  rows.push(["Colaborador:", employee.name]);
-  rows.push(["DNI:", dni]);
-  rows.push(["Cargo:", employee.role]);
-  rows.push(["Jornada Planificada:", `${employee.workStart} a ${employee.workEnd}`]);
-  rows.push(["Rango de Fechas:", `${startDate || 'Inicio'} al ${endDate || 'Fin'}`]);
-  rows.push([]); // Línea vacía
-  
-  // Cabecera
-  rows.push(["Fecha", "Entrada Real", "Tardanza", "Refrigerio Real (Inicio -> Fin)", "Salida Real", "Horas Extra", "Refrigerio Total", "Exceso de Break (min)", "Trabajo Real", "Diferencia"]);
-  
-  sortedDates.forEach(dateStr => {
-    const dayMarks = grouped[dateStr].sort((a, b) => a.timestamp - b.timestamp);
-    const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+
+  if (isAll) {
+    // EXPORTACIÓN MODO TODOS LOS COLABORADORES (DISEÑO AGRUPADO POR SECCIÓN)
+    rows.push(["Reporte de Asistencia - Todos los Colaboradores"]);
+    rows.push(["Rango de Fechas:", `${startDate || 'Inicio'} al ${endDate || 'Fin'}`]);
+    rows.push([]);
     
-    const breakStr = report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00';
-    const excessBreakMin = report.excessBreakMinutes > 0 ? report.excessBreakMinutes : 0;
-    const workedStr = report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00';
-    const diffStr = report.status;
-    const tardyStr = report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00';
-    const extraHrsStr = report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00';
+    rows.push(["Fecha / Colaborador", "Entrada Real / Prog.", "Tardanza", "Refrigerio Real / Prog.", "Salida Real / Prog.", "Horas Extra", "Refrigerio Total", "Exceso de Break (min)", "Trabajo Real", "Diferencia"]);
     
-    const entradaText = report.entradaDevice && report.entradaDevice !== '---' ? `${report.entradaReal} (${report.entradaDevice})` : report.entradaReal;
-    const salidaText = report.salidaDevice && report.salidaDevice !== '---' ? `${report.salidaReal} (${report.salidaDevice})` : report.salidaReal;
+    const historyByEmployee = {};
+    filteredHistory.forEach(item => {
+      if (!historyByEmployee[item.dni]) historyByEmployee[item.dni] = [];
+      historyByEmployee[item.dni].push(item);
+    });
+
+    const sortedDnis = Object.keys(historyByEmployee).sort((a, b) => {
+      const nameA = employeesDatabase[a]?.name || '';
+      const nameB = employeesDatabase[b]?.name || '';
+      return nameA.localeCompare(nameB);
+    });
+
+    sortedDnis.forEach(empDni => {
+      const emp = employeesDatabase[empDni];
+      if (!emp) return;
+
+      const empHistory = historyByEmployee[empDni];
+
+      const groupedByDate = {};
+      empHistory.forEach(item => {
+        if (!groupedByDate[item.dateStr]) groupedByDate[item.dateStr] = [];
+        groupedByDate[item.dateStr].push(item);
+      });
+
+      const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+        const partsA = a.split('/');
+        const partsB = b.split('/');
+        const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
+        const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
+        return dateB - dateA;
+      });
+
+      let totalWorkedSecs = 0;
+      let totalTardySecs = 0;
+      let totalOvertimeSecs = 0;
+      let totalBreakSecs = 0;
+      let totalDiffSecs = 0;
+
+      const empDayRows = [];
+      sortedDates.forEach(dateStr => {
+        const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
+        const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
+
+        totalWorkedSecs += report.workedSeconds;
+        totalTardySecs += report.tardinessSeconds;
+        totalOvertimeSecs += report.horasAdicionalesSeconds;
+        totalBreakSecs += report.breakSeconds;
+        totalDiffSecs += report.diffSeconds;
+
+        const breakStr = report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00';
+        const excessBreakMin = report.excessBreakMinutes > 0 ? report.excessBreakMinutes : 0;
+        const workedStr = report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00';
+        const diffStr = report.status;
+        const tardyStr = report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00';
+        const extraHrsStr = report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00';
+        
+        const entradaText = report.entradaDevice && report.entradaDevice !== '---' ? `${report.entradaReal} (${report.entradaDevice})` : report.entradaReal;
+        const salidaText = report.salidaDevice && report.salidaDevice !== '---' ? `${report.salidaReal} (${report.salidaDevice})` : report.salidaReal;
+
+        empDayRows.push([
+          dateStr,
+          entradaText,
+          tardyStr,
+          report.breakReal,
+          salidaText,
+          extraHrsStr,
+          breakStr,
+          excessBreakMin,
+          workedStr,
+          diffStr
+        ]);
+      });
+
+      // Añadir fila resumen del colaborador en Excel
+      const scheduledBreakStr = `${emp.breakStart || "13:00"} - ${emp.breakEnd || "14:00"}`;
+      rows.push([
+        emp.name,
+        emp.workStart || "08:00",
+        totalTardySecs > 0 ? formatSecondsToHHMMSS(totalTardySecs) : '00:00:00',
+        scheduledBreakStr,
+        emp.workEnd || "18:00",
+        totalOvertimeSecs > 0 ? formatSecondsToHHMMSS(totalOvertimeSecs) : '00:00:00',
+        totalBreakSecs > 0 ? formatSecondsToHHMMSS(totalBreakSecs) : '00:00:00',
+        "", // sin exceso acumulado en cabecera
+        totalWorkedSecs > 0 ? formatSecondsToHHMMSS(totalWorkedSecs) : '00:00:00',
+        (totalDiffSecs > 0 ? '+' : '') + formatSecondsToHHMMSS(totalDiffSecs)
+      ]);
+
+      // Añadir días
+      empDayRows.forEach(dr => rows.push(dr));
+      rows.push([]); // fila en blanco de separación
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const colWidths = rows[3].map((_, colIndex) => {
+      const maxLen = Math.max(...rows.slice(3).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
+      return { wch: Math.max(12, maxLen + 3) };
+    });
+    ws['!cols'] = colWidths;
     
-    rows.push([
-      dateStr,
-      entradaText,
-      tardyStr,
-      report.breakReal,
-      salidaText,
-      extraHrsStr,
-      breakStr,
-      excessBreakMin,
-      workedStr,
-      diffStr
-    ]);
-  });
-  
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  
-  // Auto-ajustar ancho de columnas
-  const colWidths = rows[7].map((_, colIndex) => {
-    const maxLen = Math.max(...rows.slice(7).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
-    return { wch: Math.max(12, maxLen + 3) };
-  });
-  ws['!cols'] = colWidths;
-  
-  XLSX.utils.book_append_sheet(wb, ws, "Reporte Colaborador");
-  
-  const cleanName = employee.name.replace(/[^a-zA-Z0-9]/g, "_");
-  const dateRangeStr = `${startDate || 'inicio'}_a_${endDate || 'fin'}`;
-  
-  XLSX.writeFile(wb, `Reporte_Asistencia_${cleanName}_${dateRangeStr}.xlsx`);
-  showToast('success', 'Exportación Completa', 'Se descargó el reporte del colaborador en formato Excel (.xlsx).');
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte Todos");
+    XLSX.writeFile(wb, `Reporte_Asistencia_Todos_${startDate || 'inicio'}_a_${endDate || 'fin'}.xlsx`);
+    showToast('success', 'Exportación Completa', 'Se descargó el reporte de todos los colaboradores en formato Excel (.xlsx).');
+    return;
+
+  } else {
+    // MODO INDIVIDUAL
+    const grouped = {};
+    filteredHistory.forEach(item => {
+      if (!grouped[item.dateStr]) grouped[item.dateStr] = [];
+      grouped[item.dateStr].push(item);
+    });
+    
+    const sortedDates = Object.keys(grouped).sort((a, b) => {
+      const partsA = a.split('/');
+      const partsB = b.split('/');
+      const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
+      const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
+      return dateB - dateA;
+    });
+    
+    rows.push(["Reporte de Asistencia Personalizado"]);
+    rows.push(["Colaborador:", employee.name]);
+    rows.push(["DNI:", dni]);
+    rows.push(["Cargo:", employee.role]);
+    rows.push(["Jornada Planificada:", `${employee.workStart} a ${employee.workEnd}`]);
+    rows.push(["Rango de Fechas:", `${startDate || 'Inicio'} al ${endDate || 'Fin'}`]);
+    rows.push([]);
+    
+    rows.push(["Fecha", "Entrada Real", "Tardanza", "Refrigerio Real (Inicio -> Fin)", "Salida Real", "Horas Extra", "Refrigerio Total", "Exceso de Break (min)", "Trabajo Real", "Diferencia"]);
+    
+    sortedDates.forEach(dateStr => {
+      const dayMarks = grouped[dateStr].sort((a, b) => a.timestamp - b.timestamp);
+      const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+      
+      const breakStr = report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00';
+      const excessBreakMin = report.excessBreakMinutes > 0 ? report.excessBreakMinutes : 0;
+      const workedStr = report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00';
+      const diffStr = report.status;
+      const tardyStr = report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00';
+      const extraHrsStr = report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00';
+      
+      const entradaText = report.entradaDevice && report.entradaDevice !== '---' ? `${report.entradaReal} (${report.entradaDevice})` : report.entradaReal;
+      const salidaText = report.salidaDevice && report.salidaDevice !== '---' ? `${report.salidaReal} (${report.salidaDevice})` : report.salidaReal;
+      
+      rows.push([
+        dateStr,
+        entradaText,
+        tardyStr,
+        report.breakReal,
+        salidaText,
+        extraHrsStr,
+        breakStr,
+        excessBreakMin,
+        workedStr,
+        diffStr
+      ]);
+    });
+    
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const colWidths = rows[7].map((_, colIndex) => {
+      const maxLen = Math.max(...rows.slice(7).map(row => row[colIndex] ? String(row[colIndex]).length : 0));
+      return { wch: Math.max(12, maxLen + 3) };
+    });
+    ws['!cols'] = colWidths;
+    
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte Colaborador");
+    
+    const cleanName = employee.name.replace(/[^a-zA-Z0-9]/g, "_");
+    const dateRangeStr = `${startDate || 'inicio'}_a_${endDate || 'fin'}`;
+    
+    XLSX.writeFile(wb, `Reporte_Asistencia_${cleanName}_${dateRangeStr}.xlsx`);
+    showToast('success', 'Exportación Completa', 'Se descargó el reporte del colaborador en formato Excel (.xlsx).');
+  }
 }
 
 function exportConsolidatedExcel() {
@@ -3976,7 +4337,7 @@ function exportConsolidatedExcel() {
   // Cabecera
   const header = ["Colaborador", "DNI"];
   sortedDates.forEach(dateStr => header.push(dateStr));
-  header.push("Total Horas", "Tardanzas", "Faltas");
+  header.push("Total Horas", "Tardanzas", "Total Hrs. Tardanzas", "Faltas");
   rows.push(header);
   
   // Filas por cada colaborador
@@ -3986,6 +4347,7 @@ function exportConsolidatedExcel() {
     
     let totalWorkedSeconds = 0;
     let totalTardinessCount = 0;
+    let totalTardinessSeconds = 0;
     let totalAbsentCount = 0;
     
     sortedDates.forEach(dateStr => {
@@ -4050,6 +4412,7 @@ function exportConsolidatedExcel() {
         totalWorkedSeconds += report.workedSeconds;
         if (report.tardiness) {
           totalTardinessCount++;
+          totalTardinessSeconds += report.tardinessSeconds;
         }
 
         if (hasSalida) {
@@ -4074,7 +4437,12 @@ function exportConsolidatedExcel() {
         }
       }
     });
-    row.push(formatSecondsToHHMMSS(totalWorkedSeconds), `${totalTardinessCount} tard.`, `${totalAbsentCount} faltas`);
+    row.push(
+      formatSecondsToHHMMSS(totalWorkedSeconds), 
+      `${totalTardinessCount} tard.`, 
+      formatSecondsToHHMMSS(totalTardinessSeconds), 
+      `${totalAbsentCount} faltas`
+    );
     rows.push(row);
   });
   

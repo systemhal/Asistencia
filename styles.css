@@ -715,6 +715,7 @@ input::-webkit-calendar-picker-indicator:hover {
 /* Totales fijos del consolidado */
 .cell-total-worked { font-weight: 700 !important; color: var(--color-blue) !important; text-align: center; background: rgba(59, 130, 246, 0.05); }
 .cell-total-tardy { font-weight: 700 !important; color: #f59e0b !important; text-align: center; background: rgba(245, 158, 11, 0.05); }
+.cell-total-tardy-seconds { font-weight: 700 !important; color: #f59e0b !important; text-align: center; background: rgba(245, 158, 11, 0.05); }
 .cell-total-absent { font-weight: 700 !important; color: #ef4444 !important; text-align: center; background: rgba(239, 68, 68, 0.05); }
 
 .table-responsive { width: 100%; overflow-x: auto; }
@@ -1249,4 +1250,55 @@ input::-webkit-calendar-picker-indicator:hover {
   .badge-excess-break .material-symbols-rounded {
     font-size: 10px !important;
   }
+}
+
+/* ==========================================================================
+   COLUMNAS ESTÁTICAS (STICKY COLUMNS) EN RESUMEN CONSOLIDADO (EXCLUSIVO)
+   ========================================================================== */
+#admin-consolidated-thead th:nth-child(1),
+#admin-consolidated-table-body td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background-color: var(--bg-page) !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.15);
+}
+
+#admin-consolidated-thead th:nth-child(2),
+#admin-consolidated-table-body td:nth-child(2) {
+  position: sticky;
+  left: 220px; /* Ancho exacto de la columna 1 */
+  z-index: 10;
+  background-color: var(--bg-page) !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.15);
+}
+
+#admin-consolidated-thead th:nth-child(1),
+#admin-consolidated-thead th:nth-child(2) {
+  z-index: 12;
+}
+
+/* Efecto hover sobre las celdas congeladas */
+#admin-consolidated-table-body tr:hover td:nth-child(1),
+#admin-consolidated-table-body tr:hover td:nth-child(2) {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* ==========================================================================
+   CABECERAS PEGADOJAS (STICKY VERTICAL) EN REPORTE POR AGENTE
+   ========================================================================== */
+#tab-reports-content .admin-table th {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background-color: var(--bg-page) !important;
+  box-shadow: 0 2px 2px -1px rgba(0,0,0,0.15);
+}
+
+#tab-reports-content .admin-table tr.summary-row td {
+  position: sticky;
+  top: 37px; /* justo debajo de th */
+  z-index: 14;
+  background-color: var(--bg-secondary) !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
