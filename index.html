@@ -445,7 +445,7 @@
               Este cuadro resume la asistencia de todo el personal en el día seleccionado, detallando las horas reales de entrada/salida, break, trabajo real, tardanzas e incidencias.
             </p>
 
-            <div class="table-responsive">
+            <div class="table-responsive report-scroll-container">
               <table class="admin-table">
                 <thead>
                   <tr>
@@ -763,6 +763,7 @@
                         <th>Colaborador</th>
                         <th>Fecha</th>
                         <th>Tipo</th>
+                        <th>Detalles / Motivo</th>
                         <th>Acción</th>
                       </tr>
                     </thead>
@@ -924,6 +925,36 @@
               </button>
             </div>
           </div>
+
+          <!-- Generador de Hash de Contraseña (Seguridad Avanzada) -->
+          <div class="card-inner" style="margin-top: 25px;">
+            <div class="inner-header">
+              <h3>Generador de Hash de Contraseña (Cambiar Clave de Admin)</h3>
+              <span class="material-symbols-rounded text-gradient">vpn_key</span>
+            </div>
+            <p style="margin: 0 0 15px 0; font-size: 0.9rem; color: var(--text-secondary);">
+              Para cambiar la contraseña de administrador de manera segura, escribe la nueva clave abajo. Copia el Hash generado y pégalo en el archivo <code>app.js</code> (en la variable <code>ADMIN_PASSWORD_HASH</code>).
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 15px;">
+              <div class="input-group" style="margin-bottom: 0;">
+                <label for="input-hash-password">Nueva Contraseña</label>
+                <div class="input-wrapper">
+                  <span class="material-symbols-rounded input-icon">lock_open</span>
+                  <input type="text" id="input-hash-password" placeholder="Escribe la nueva contraseña aquí...">
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom: 0;">
+                <label for="input-hash-result">Hash Generado (Copiar en app.js)</label>
+                <div class="input-wrapper" style="display: flex; gap: 10px;">
+                  <span class="material-symbols-rounded input-icon">key</span>
+                  <input type="text" id="input-hash-result" readonly placeholder="El hash aparecerá aquí..." style="flex: 1; font-family: monospace; background: var(--bg-inner); cursor: text;">
+                  <button id="btn-copy-hash" class="btn-primary" style="padding: 0 15px; border-radius: var(--radius-sm); font-size: 0.85rem;" disabled>
+                    <span class="material-symbols-rounded">content_copy</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div> <!-- Fin de #tab-register-content -->
 
         <!-- CONTENIDO PESTAÑA 2: REPORTES POR AGENTE -->
@@ -1010,7 +1041,7 @@
                 </div>
               </div>
               
-              <div class="table-responsive">
+              <div class="table-responsive report-scroll-container">
                 <table class="admin-table">
                   <thead>
                     <tr>
@@ -1108,7 +1139,7 @@
               Esta tabla muestra las horas trabajadas por cada agente en cada día registrado. El tiempo de refrigerio (break) se deduce automáticamente de la jornada.
             </p>
 
-            <div class="table-responsive">
+            <div class="table-responsive report-scroll-container">
               <table class="admin-table">
                 <thead id="admin-consolidated-thead">
                   <tr>
@@ -1182,7 +1213,7 @@
               Este cuadro resume la asistencia del mes seleccionado, detallando horas trabajadas, la suma de minutos de tardanzas, el conteo de inasistencias (excluyendo días de descanso y feriados) y el exceso de refrigerios.
             </p>
 
-            <div class="table-responsive">
+            <div class="table-responsive report-scroll-container">
               <table class="admin-table">
                 <thead>
                   <tr>

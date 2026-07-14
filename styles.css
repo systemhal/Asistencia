@@ -670,7 +670,7 @@ input::-webkit-calendar-picker-indicator:hover {
 .stat-card h3 { font-family: var(--font-display); font-size: 1.55rem; font-weight: 700; line-height: 1.1; color: var(--text-primary); }
 .stat-card p  { font-size: 0.78rem; color: var(--text-muted); }
 
-.admin-panel-layout { grid-template-columns: 1.6fr 1fr; }
+.admin-panel-layout { grid-template-columns: 2.2fr 1fr; }
 
 /* Admin table */
 .admin-table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -976,6 +976,14 @@ input::-webkit-calendar-picker-indicator:hover {
   display: inline-block;
 }
 
+.report-scroll-container {
+  max-height: 550px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-inner);
+}
+
 .print-only {
   display: none !important;
 }
@@ -1070,10 +1078,13 @@ input::-webkit-calendar-picker-indicator:hover {
   }
 
   /* Evitar desbordes de tabla en el PDF */
-  .table-responsive {
+  .table-responsive,
+  .report-scroll-container {
     overflow: visible !important;
+    max-height: none !important;
     width: 100% !important;
     max-width: 100% !important;
+    border: none !important;
   }
 
   .admin-table {

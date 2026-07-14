@@ -11,15 +11,16 @@ function getJsonResponse(data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// Inicializar hojas si no existen
+// Inicializar hojas si no existen o tienen menos columnas (Autoreparable)
 function ensureSheetsExist() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
   var sheets = {
     "Personal": ["Fecha", "Dni", "Nombre Completo", "Edad", "Sexo", "Cargo / Puesto", "Entrada Jornada", "Salida Jornada", "Inicio Break", "Fin Break", "PIN", "Horarios Semanales"],
     "Asistencia": ["Fecha", "Hora", "DNI", "Nombre Colaborador", "Acción", "Detalles", "Timestamp Unix", "Dispositivo"],
-    "Justificaciones": ["DNI", "Fecha", "Tipo", "Detalles"],
-    "Feriados": ["Fecha", "Nombre"]
+    "Justificaciones": ["DNI", "Fecha", "Tipo", "Detalles", "Hora Inicio", "Hora Fin", "¿Con Goce?"],
+    "Feriados": ["Fecha", "Nombre"],
+    "Horarios": ["Día", "DNI", "Nombre Completo", "Entrada - Salida", "Hrs"]
   };
   
   for (var name in sheets) {
@@ -29,6 +30,21 @@ function ensureSheetsExist() {
       sheet.appendRow(sheets[name]);
       // Dar formato de cabecera negrita
       sheet.getRange(1, 1, 1, sheets[name].length).setFontWeight("bold");
+    } else {
+      // Verificar si la hoja tiene suficientes columnas para las expectativas
+      var expectedHeaders = sheets[name];
+      var maxCols = sheet.getMaxColumns();
+      if (maxCols < expectedHeaders.length) {
+        sheet.insertColumnsAfter(maxCols, expectedHeaders.length - maxCols);
+      }
+      
+      // Leer cabeceras actuales y asegurar que todas estén escritas
+      var currentHeaders = sheet.getRange(1, 1, 1, expectedHeaders.length).getDisplayValues()[0];
+      for (var colIdx = 0; colIdx < expectedHeaders.length; colIdx++) {
+        if (!currentHeaders[colIdx] || currentHeaders[colIdx].trim() === "") {
+          sheet.getRange(1, colIdx + 1).setValue(expectedHeaders[colIdx]).setFontWeight("bold");
+        }
+      }
     }
   }
 }
@@ -50,7 +66,14 @@ function formatDateValue(val) {
   if (val instanceof Date) {
     return Utilities.formatDate(val, Session.getScriptTimeZone(), "dd/MM/yyyy");
   }
-  return String(val).trim();
+  var s = String(val).trim();
+  // Si es una fecha ISO, parsear e imponer formato dd/MM/yyyy
+  if (s.indexOf('T') > 0 && !isNaN(Date.parse(s))) {
+    try {
+      return Utilities.formatDate(new Date(s), Session.getScriptTimeZone(), "dd/MM/yyyy");
+    } catch(e) {}
+  }
+  return s;
 }
 
 // Helper para dar formato a horas largas (con segundos)
@@ -146,6 +169,7 @@ function doPost(e) {
         postData.pin || "1234",   // 11. PIN (K)
         postData.weeklySchedule || ""   // 12. Horarios Semanales (L)
       ]);
+      updateHorariosSheet(ss, postData.employeeId, postData.employeeName, postData.weeklySchedule || "");
       return getJsonResponse({ status: "ok", message: "Colaborador registrado." });
     }
     
@@ -176,6 +200,7 @@ function doPost(e) {
           postData.pin,             // 11. PIN (K)
           postData.weeklySchedule || "" // 12. Horarios Semanales (L)
         ]]);
+        updateHorariosSheet(ss, postData.employeeId, postData.employeeName, postData.weeklySchedule || "");
         return getJsonResponse({ status: "ok", message: "Colaborador actualizado." });
       }
       return getJsonResponse({ status: "error", message: "Colaborador no encontrado." });
@@ -191,6 +216,7 @@ function doPost(e) {
           break;
         }
       }
+      deleteFromHorariosSheet(ss, postData.employeeId);
       return getJsonResponse({ status: "ok", message: "Colaborador eliminado." });
     }
     
@@ -206,13 +232,34 @@ function doPost(e) {
           break;
         }
       }
+      var sheetJust = ss.getSheetByName("Justificaciones");
+      var payload = postData;
+      var employeeId = payload.employeeId;
       
-      if (foundRow >= 0) {
-        sheet.getRange(foundRow, 3, 1, 2).setValues([[postData.type, postData.details]]);
-      } else {
-        sheet.appendRow([postData.employeeId, postData.date, postData.type, postData.details]);
+      const { date, type, startTime, endTime, compensation } = payload; // date en formato DD/MM/YYYY, type es "Vacaciones", etc.
+      const desc = payload.details || "";
+      if (!employeeId || !date || !type) {
+        return getJsonResponse({ status: "error", message: "Faltan campos obligatorios para registrar la justificación." });
       }
-      return getJsonResponse({ status: "ok", message: "Justificación guardada." });
+      
+      // Evitar duplicados en la misma fecha y DNI: borrar la anterior
+      let displayData = sheetJust.getDataRange().getDisplayValues();
+      for (let i = displayData.length - 1; i > 0; i--) {
+        if (String(displayData[i][0]) === String(employeeId) && formatDateValue(displayData[i][1]) === formatDateValue(date)) {
+          sheetJust.deleteRow(i + 1);
+        }
+      }
+      
+      sheetJust.appendRow([
+        String(employeeId), 
+        String(date), 
+        String(type), 
+        String(desc),
+        String(startTime || ""),
+        String(endTime || ""),
+        String(compensation || "")
+      ]);
+      return getJsonResponse({ status: "ok", message: "Justificación registrada exitosamente." });
     }
     
     // 5. Eliminar Justificación
@@ -220,7 +267,7 @@ function doPost(e) {
       var sheet = ss.getSheetByName("Justificaciones");
       var data = sheet.getDataRange().getValues();
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][0]) === String(postData.employeeId) && data[i][1] === postData.date) {
+        if (String(data[i][0]) === String(postData.employeeId) && formatDateValue(data[i][1]) === formatDateValue(postData.date)) {
           sheet.deleteRow(i + 1);
           break;
         }
@@ -235,7 +282,7 @@ function doPost(e) {
       var foundRow = -1;
       
       for (var i = 1; i < data.length; i++) {
-        if (data[i][0] === postData.date) {
+        if (formatDateValue(data[i][0]) === formatDateValue(postData.date)) {
           foundRow = i + 1;
           break;
         }
@@ -254,7 +301,7 @@ function doPost(e) {
       var sheet = ss.getSheetByName("Feriados");
       var data = sheet.getDataRange().getValues();
       for (var i = 1; i < data.length; i++) {
-        if (data[i][0] === postData.date) {
+        if (formatDateValue(data[i][0]) === formatDateValue(postData.date)) {
           sheet.deleteRow(i + 1);
           break;
         }
@@ -323,11 +370,19 @@ function getJustificacionesData(ss) {
   var data = sheet.getDataRange().getValues();
   var list = [];
   for (var i = 1; i < data.length; i++) {
+    var sTime = data[i][4] ? formatTimeValue(data[i][4]) : "";
+    if (sTime === "—") sTime = "";
+    var eTime = data[i][5] ? formatTimeValue(data[i][5]) : "";
+    if (eTime === "—") eTime = "";
+
     list.push({
       dni: String(data[i][0]),
-      dateStr: data[i][1],
+      dateStr: formatDateValue(data[i][1]),
       type: data[i][2],
-      details: data[i][3]
+      details: data[i][3],
+      startTime: sTime,
+      endTime: eTime,
+      compensation: data[i][6] || ""
     });
   }
   return list;
@@ -341,7 +396,7 @@ function getFeriadosData(ss) {
   var list = [];
   for (var i = 1; i < data.length; i++) {
     list.push({
-      dateStr: data[i][0],
+      dateStr: formatDateValue(data[i][0]),
       name: data[i][1]
     });
   }
@@ -371,4 +426,90 @@ function getHistoryData(ss, filterDni) {
     });
   }
   return history;
+}
+
+// ── SISTEMA DE SINCRONIZACIÓN EN LA PESTAÑA "HORARIOS" ────────────────────
+
+function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
+  var sheet = ss.getSheetByName("Horarios");
+  if (!sheet) return;
+  
+  // 1. Primero, eliminar todas las filas existentes de este DNI en "Horarios"
+  // Buscamos en columna A (por si acaso quedó el formato horizontal anterior) y columna B (DNI oficial en formato vertical)
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i > 0; i--) {
+    if (String(data[i][0]) === String(employeeId) || String(data[i][1]) === String(employeeId)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  
+  // 2. Parsear el weeklySchedule
+  var sched = {};
+  var isFlexible = (weeklySchedule === "flexible");
+  if (!isFlexible && weeklySchedule) {
+    try {
+      sched = JSON.parse(weeklySchedule);
+    } catch(e) {
+      sched = {};
+    }
+  }
+  
+  var daysOrder = [
+    { key: "1", label: "Lunes" },
+    { key: "2", label: "Martes" },
+    { key: "3", label: "Miércoles" },
+    { key: "4", label: "Jueves" },
+    { key: "5", label: "Viernes" },
+    { key: "6", label: "Sábado" },
+    { key: "0", label: "Domingo" }
+  ];
+  
+  // 3. Escribir las 7 nuevas filas para el colaborador
+  for (var j = 0; j < daysOrder.length; j++) {
+    var dayObj = daysOrder[j];
+    var timeStr = "";
+    var hours = 0;
+    
+    if (isFlexible) {
+      timeStr = "Flexible";
+      hours = 0;
+    } else {
+      var daySched = sched[dayObj.key];
+      if (daySched) {
+        if (daySched.isRestDay) {
+          timeStr = ""; // Celda en blanco para días de descanso en Entrada - Salida
+          hours = 0;
+        } else {
+          timeStr = (daySched.workStart || "09:00") + " - " + (daySched.workEnd || "18:00");
+          if (daySched.nobreak) {
+            timeStr += " (S/B)";
+          }
+          hours = daySched.expectedHours !== undefined ? Number(daySched.expectedHours) : 8;
+        }
+      } else {
+        timeStr = "—";
+        hours = 0;
+      }
+    }
+    
+    sheet.appendRow([
+      dayObj.label,        // A: Día
+      String(employeeId),  // B: DNI
+      String(name),        // C: Nombre Completo
+      timeStr,             // D: Entrada - Salida
+      hours                // E: Hrs
+    ]);
+  }
+}
+
+function deleteFromHorariosSheet(ss, employeeId) {
+  var sheet = ss.getSheetByName("Horarios");
+  if (!sheet) return;
+  
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i > 0; i--) {
+    if (String(data[i][0]) === String(employeeId) || String(data[i][1]) === String(employeeId)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
 }

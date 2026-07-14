@@ -20,7 +20,31 @@ const DEFAULT_EMPLOYEES = {
 let employeesDatabase = {};
 
 // Admin Password
-const ADMIN_PASSWORD = "admin123";
+const ADMIN_PASSWORD_HASH = "pc_authorized_g10hvh";
+
+const GLOBAL_FERIADOS = [
+  "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", 
+  "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
+];
+
+function safeSetItem(key, value) {
+  try {
+    safeSetItem(key, value);
+  } catch (e) {
+    console.error('Error guardando en localStorage:', e);
+  }
+}
+
+function generateAuthToken(password) {
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return 'pc_authorized_' + Math.abs(hash).toString(36);
+}
+
 
 // State variables
 let currentSession = null; 
@@ -128,7 +152,7 @@ function initThemeToggle() {
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
     applyTheme(next, icon);
-    localStorage.setItem('app_theme', next);
+    safeSetItem('app_theme', next);
   });
 }
 
@@ -157,11 +181,11 @@ function loadLocalStorage() {
       }
     });
     if (needsSave) {
-      localStorage.setItem('employees_db', JSON.stringify(employeesDatabase));
+      safeSetItem('employees_db', JSON.stringify(employeesDatabase));
     }
   } else {
     employeesDatabase = { ...DEFAULT_EMPLOYEES };
-    localStorage.setItem('employees_db', JSON.stringify(employeesDatabase));
+    safeSetItem('employees_db', JSON.stringify(employeesDatabase));
   }
 
   // Asegurar que todos tengan la clave 'dni'
@@ -227,8 +251,8 @@ function loadLocalStorage() {
 }
 
 function saveState() {
-  localStorage.setItem('attendance_state', JSON.stringify(attendanceState));
-  localStorage.setItem('employees_db', JSON.stringify(employeesDatabase));
+  safeSetItem('attendance_state', JSON.stringify(attendanceState));
+  safeSetItem('employees_db', JSON.stringify(employeesDatabase));
 }
 
 // Reverted saveOvertime
@@ -748,6 +772,7 @@ function syncEmployeesFromGoogleSheets() {
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
+        employeesDatabase = {};
         res.data.forEach(emp => {
           // Parsear weeklySchedule
           let parsedWeekly = null;
@@ -807,6 +832,7 @@ function syncAllAttendanceStatesFromHistory() {
     .then(history => {
       if (!history || !Array.isArray(history)) return;
       
+      attendanceState = {};
       // Inicializar el historial vacío de todos los empleados
       Object.keys(employeesDatabase).forEach(dni => {
         if (!attendanceState[dni]) {
@@ -872,6 +898,8 @@ function syncInitialData() {
         
         // 1. Cargar colaboradores
         if (Array.isArray(employees)) {
+          employeesDatabase = {};
+          attendanceState = {};
           employees.forEach(emp => {
             let parsedWeekly = null;
             if (emp.weeklySchedule) {
@@ -1132,7 +1160,7 @@ function setupEventListeners() {
     e.preventDefault();
     const password = inputAdminPassword.value;
     
-    if (password === ADMIN_PASSWORD) {
+    if (generateAuthToken(password) === ADMIN_PASSWORD_HASH) {
       adminAuthModal.classList.add('hidden');
       inputAdminPassword.value = '';
       adminErrorMsg.classList.add('hidden');
@@ -1167,7 +1195,7 @@ function setupEventListeners() {
       const tolVal = parseInt(toleranceInput.value, 10);
       if (!isNaN(tolVal) && tolVal >= 0) {
         tardinessTolerance = tolVal;
-        localStorage.setItem('tardiness_tolerance', tardinessTolerance);
+        safeSetItem('tardiness_tolerance', tardinessTolerance);
       }
     }
 
@@ -1179,7 +1207,7 @@ function setupEventListeners() {
       urlMessage = 'Se removió el enlace de Google Apps Script.';
     } else if (url.startsWith('https://')) {
       googleScriptUrl = url;
-      localStorage.setItem('google_script_url', googleScriptUrl);
+      safeSetItem('google_script_url', googleScriptUrl);
       btnTestConnection.disabled = false;
       urlMessage = 'La URL fue almacenada correctamente.';
     } else {
@@ -1192,15 +1220,15 @@ function setupEventListeners() {
     const chkPcs = document.getElementById('chk-restrict-pcs');
     if (chkMobile) {
       securityBlockMobile = chkMobile.checked;
-      localStorage.setItem('security_block_mobile', securityBlockMobile);
+      safeSetItem('security_block_mobile', securityBlockMobile);
     }
     if (chkPcs) {
       securityRestrictPcs = chkPcs.checked;
-      localStorage.setItem('security_restrict_pcs', securityRestrictPcs);
+      safeSetItem('security_restrict_pcs', securityRestrictPcs);
       if (securityRestrictPcs) {
         // Auto-autorizar esta PC actual para evitar bloqueo inmediato del administrador
-        const expectedToken = generateAuthToken(ADMIN_PASSWORD);
-        localStorage.setItem('asistencia_pc_auth_token', expectedToken);
+        const expectedToken = ADMIN_PASSWORD_HASH;
+        safeSetItem('asistencia_pc_auth_token', expectedToken);
       }
     }
     validateDeviceSecurity();
@@ -1215,6 +1243,42 @@ function setupEventListeners() {
     loadConsolidatedReport();
   });
 
+  // Eventos para el Generador de Hash de Contraseña
+  const inputHashPassword = document.getElementById('input-hash-password');
+  const inputHashResult = document.getElementById('input-hash-result');
+  const btnCopyHash = document.getElementById('btn-copy-hash');
+
+  if (inputHashPassword && inputHashResult && btnCopyHash) {
+    inputHashPassword.addEventListener('input', () => {
+      const val = inputHashPassword.value.trim();
+      if (val === '') {
+        inputHashResult.value = '';
+        btnCopyHash.disabled = true;
+      } else {
+        const hash = generateAuthToken(val);
+        inputHashResult.value = hash;
+        btnCopyHash.disabled = false;
+      }
+    });
+
+    btnCopyHash.addEventListener('click', () => {
+      const text = inputHashResult.value;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('success', 'Hash Copiado', 'Pégalo en ADMIN_PASSWORD_HASH en la línea 1 de app.js.');
+        }).catch(err => {
+          inputHashResult.select();
+          document.execCommand('copy');
+          showToast('success', 'Hash Copiado', 'Pégalo en ADMIN_PASSWORD_HASH en la línea 1 de app.js.');
+        });
+      } else {
+        inputHashResult.select();
+        document.execCommand('copy');
+        showToast('success', 'Hash Copiado', 'Pégalo en ADMIN_PASSWORD_HASH en la línea 1 de app.js.');
+      }
+    });
+  }
+
   // Dynamic change listener for tardiness tolerance input
   const toleranceInput = document.getElementById('input-tardiness-tolerance');
   if (toleranceInput) {
@@ -1222,7 +1286,7 @@ function setupEventListeners() {
       const tolVal = parseInt(toleranceInput.value, 10);
       if (!isNaN(tolVal) && tolVal >= 0) {
         tardinessTolerance = tolVal;
-        localStorage.setItem('tardiness_tolerance', tardinessTolerance);
+        safeSetItem('tardiness_tolerance', tardinessTolerance);
         
         const select = document.getElementById('select-report-employee');
         if (select && select.value) {
@@ -1630,7 +1694,7 @@ function updateAdminView() {
     const dStr = String(todayDateObj.getDate()).padStart(2, '0');
     const mStr = String(todayDateObj.getMonth() + 1).padStart(2, '0');
     const dayMonth = `${dStr}/${mStr}`;
-    const isStaticHoliday = FERIADOS.includes(dayMonth);
+    const isStaticHoliday = GLOBAL_FERIADOS.includes(dayMonth);
     const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normToday);
     const isHoliday = isStaticHoliday || !!customHoliday;
     
@@ -2358,7 +2422,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
       const dayStr = String(parseInt(parts[0], 10)).padStart(2, '0');
       const monthStr = String(parseInt(parts[1], 10)).padStart(2, '0');
       const dayMonth = `${dayStr}/${monthStr}`;
-      isHoliday = FERIADOS.includes(dayMonth);
+      isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
     }
     
     // Feriados personalizados (coincidencia de DD/MM/YYYY)
@@ -3206,7 +3270,7 @@ function renderConsolidatedTable(history) {
         const FERIADOS = [
           "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
         ];
-        isHoliday = FERIADOS.includes(dayMonth);
+        isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
         const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
         if (customHoliday) isHoliday = true;
       }
@@ -3936,7 +4000,7 @@ function exportConsolidatedExcel() {
         const FERIADOS = [
           "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
         ];
-        isHoliday = FERIADOS.includes(dayMonth);
+        isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
         const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
         if (customHoliday) isHoliday = true;
       }
@@ -4276,7 +4340,7 @@ function renderDailySummaryTable(history) {
       const FERIADOS = [
         "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
       ];
-      isHoliday = FERIADOS.includes(dayMonth);
+      isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
       const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normSelectedDate);
       if (customHoliday) isHoliday = true;
     }
@@ -4443,7 +4507,7 @@ function exportDailySummaryExcel() {
       const FERIADOS = [
         "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
       ];
-      isHoliday = FERIADOS.includes(dayMonth);
+      isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
       const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normSelectedDate);
       if (customHoliday) isHoliday = true;
     }
@@ -4668,7 +4732,7 @@ function renderMonthlyTable(history) {
       const dayOfWeek = d.getDay();
 
       const isCustomHoliday = feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
-      const isHoliday = FERIADOS.includes(dayMonth) || isCustomHoliday;
+      const isHoliday = GLOBAL_FERIADOS.includes(dayMonth) || isCustomHoliday;
 
       let isRestDay = false;
       if (schedObj[dayOfWeek]) {
@@ -4872,7 +4936,7 @@ function exportMonthlyExcel() {
       const dayOfWeek = d.getDay();
 
       const isCustomHoliday = feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
-      const isHoliday = FERIADOS.includes(dayMonth) || isCustomHoliday;
+      const isHoliday = GLOBAL_FERIADOS.includes(dayMonth) || isCustomHoliday;
 
       let isRestDay = false;
       if (schedObj[dayOfWeek]) {
@@ -4975,7 +5039,7 @@ function syncJustificacionesFromGoogleSheets() {
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
         justificacionesDatabase = res.data;
-        localStorage.setItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
+        safeSetItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
         renderJustificacionesTable();
         console.log("Justificaciones sincronizadas desde Google Sheets.");
       }
@@ -4990,7 +5054,7 @@ function syncFeriadosFromGoogleSheets() {
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
         feriadosDatabase = res.data;
-        localStorage.setItem('feriados_db', JSON.stringify(feriadosDatabase));
+        safeSetItem('feriados_db', JSON.stringify(feriadosDatabase));
         renderFeriadosTable();
         console.log("Feriados sincronizados desde Google Sheets.");
       }
@@ -5003,7 +5067,7 @@ function renderJustificacionesTable() {
   if (!tbody) return;
   
   if (justificacionesDatabase.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding: 15px;">No hay justificaciones registradas.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding: 15px;">No hay justificaciones registradas.</td></tr>';
     return;
   }
   
@@ -5026,6 +5090,7 @@ function renderJustificacionesTable() {
       <td>${employee.name}</td>
       <td class="text-center">${item.dateStr}</td>
       <td>${typeBadge}</td>
+      <td style="max-width: 250px; white-space: normal; word-break: break-word;">${item.details || '—'}</td>
       <td class="text-center">
         <button class="btn-delete-justification btn-table-action" data-dni="${item.dni}" data-date="${item.dateStr}" style="padding: 4px 8px; font-size: 0.8rem; border-color: rgba(220, 20, 60, 0.4); color: #ff4d4d; display: inline-flex; align-items: center; gap: 4px; background: transparent; cursor: pointer; border: 1px solid var(--border-color); border-radius: 4px;">
           <span class="material-symbols-rounded" style="font-size: 14px;">delete</span>
@@ -5153,7 +5218,7 @@ function registerJustificacion(dni, dateStr, type, details, startTime = '', endT
 
   justificacionesDatabase = justificacionesDatabase.filter(j => !(j.dni === dni && j.dateStr === dateStr));
   justificacionesDatabase.push({ dni, dateStr, type, details, startTime, endTime, compensation });
-  localStorage.setItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
+  safeSetItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
   renderJustificacionesTable();
 
   if (googleScriptUrl) {
@@ -5192,7 +5257,7 @@ function deleteJustificacion(dni, dateStr) {
       };
 
       justificacionesDatabase = justificacionesDatabase.filter(j => !(j.dni === dni && j.dateStr === dateStr));
-      localStorage.setItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
+      safeSetItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
       renderJustificacionesTable();
 
       if (googleScriptUrl) {
@@ -5227,7 +5292,7 @@ function registerFeriado(dateStr, name) {
 
   feriadosDatabase = feriadosDatabase.filter(f => f.dateStr !== dateStr);
   feriadosDatabase.push({ dateStr, name });
-  localStorage.setItem('feriados_db', JSON.stringify(feriadosDatabase));
+  safeSetItem('feriados_db', JSON.stringify(feriadosDatabase));
 
   // Seleccionar automáticamente el año del feriado recién registrado
   const parts = dateStr.split('/');
@@ -5289,7 +5354,7 @@ function deleteFeriado(dateStr) {
       };
 
       feriadosDatabase = feriadosDatabase.filter(f => f.dateStr !== dateStr);
-      localStorage.setItem('feriados_db', JSON.stringify(feriadosDatabase));
+      safeSetItem('feriados_db', JSON.stringify(feriadosDatabase));
       renderFeriadosTable();
 
       if (googleScriptUrl) {
@@ -5385,7 +5450,7 @@ function renderEmployeeWeeklySummary(dni) {
     const dayStr = String(dObj.getDate()).padStart(2, '0');
     const monthStr = String(dObj.getMonth() + 1).padStart(2, '0');
     const dayMonth = `${dayStr}/${monthStr}`;
-    const isStaticHoliday = FERIADOS.includes(dayMonth);
+    const isStaticHoliday = GLOBAL_FERIADOS.includes(dayMonth);
     const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normDate);
     const isHoliday = isStaticHoliday || !!customHoliday;
     const holidayName = customHoliday ? customHoliday.name : (isStaticHoliday ? "Feriado Nacional" : "");
@@ -5623,7 +5688,7 @@ function updateAgentGuideAndSchedule() {
     const FERIADOS = [
       "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
     ];
-    isHoliday = FERIADOS.includes(dayMonth);
+    isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
     const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normToday);
     if (customHoliday) isHoliday = true;
   }
@@ -5775,7 +5840,7 @@ function openAgentHistoryModal(isCurrentMonth = true) {
     const FERIADOS = [
       "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
     ];
-    isHoliday = FERIADOS.includes(dayMonth);
+    isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
     const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normDate);
     if (customHoliday) isHoliday = true;
 
@@ -5881,15 +5946,7 @@ function openAgentHistoryModal(isCurrentMonth = true) {
 let securityBlockMobile = false;
 let securityRestrictPcs = false;
 
-function generateAuthToken(password) {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return 'pc_authorized_' + Math.abs(hash).toString(36);
-}
+
 
 function loadSecuritySettings() {
   securityBlockMobile = localStorage.getItem('security_block_mobile') === 'true';
@@ -5935,7 +5992,7 @@ function validateDeviceSecurity() {
   
   // Case 2: Restricted PCs
   if (securityRestrictPcs) {
-    const expectedToken = generateAuthToken(ADMIN_PASSWORD);
+    const expectedToken = ADMIN_PASSWORD_HASH;
     const currentToken = localStorage.getItem('asistencia_pc_auth_token');
     
     if (currentToken !== expectedToken) {
@@ -6006,9 +6063,9 @@ function setupDeviceSecurityUIListeners() {
   if (btnSubmitAuth && inputPass) {
     btnSubmitAuth.addEventListener('click', () => {
       const pass = inputPass.value;
-      if (pass === ADMIN_PASSWORD) {
-        const token = generateAuthToken(ADMIN_PASSWORD);
-        localStorage.setItem('asistencia_pc_auth_token', token);
+      if (generateAuthToken(pass) === ADMIN_PASSWORD_HASH) {
+        const token = ADMIN_PASSWORD_HASH;
+        safeSetItem('asistencia_pc_auth_token', token);
         showToast('success', 'Dispositivo Autorizado ✅', 'Esta computadora ahora está autorizada para registrar asistencia.');
         if (errMsg) {
           errMsg.style.display = 'none';
@@ -6033,8 +6090,8 @@ function setupDeviceSecurityUIListeners() {
   // Admin panel manual buttons
   if (btnAuthorizePC) {
     btnAuthorizePC.addEventListener('click', () => {
-      const token = generateAuthToken(ADMIN_PASSWORD);
-      localStorage.setItem('asistencia_pc_auth_token', token);
+      const token = ADMIN_PASSWORD_HASH;
+      safeSetItem('asistencia_pc_auth_token', token);
       showToast('success', 'Computadora Autorizada ✅', 'Este navegador ha sido autorizado manualmente.');
     });
   }
