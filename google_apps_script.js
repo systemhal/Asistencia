@@ -50,6 +50,17 @@ function ensureSheetsExist() {
 }
 
 // Helper para dar formato a los valores de tiempo (evita que se serialicen como fechas ISO corruptas)
+
+// Helper para convertir cualquier DNI a texto plano (incluso si Sheets lo interpretó como fecha y retornó un objeto Date)
+function getSafeDni(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    var epoch = new Date(1899, 11, 30);
+    return String(Math.round((val.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000)));
+  }
+  return String(val).trim();
+}
+
 function formatTimeValue(val) {
   if (!val) return "—";
   if (val instanceof Date) {
@@ -157,7 +168,7 @@ function doPost(e) {
       var sheet = ss.getSheetByName("Personal");
       sheet.appendRow([
         Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy"), // 1. Fecha (A)
-        postData.employeeId,      // 2. Dni (B)
+        "'" + postData.employeeId,      // 2. Dni (B)
         postData.employeeName,    // 3. Nombre Completo (C)
         postData.age || "—",      // 4. Edad (D)
         postData.gender || "—",   // 5. Sexo (E)
@@ -180,7 +191,7 @@ function doPost(e) {
       var foundRow = -1;
       
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][1]) === String(postData.employeeId)) { // Buscar en Columna B (Dni)
+        if (getSafeDni(data[i][1]) === String(postData.employeeId)) { // Buscar en Columna B (Dni)
           foundRow = i + 1;
           break;
         }
@@ -227,7 +238,7 @@ function doPost(e) {
       var foundRow = -1;
       
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][0]) === String(postData.employeeId) && data[i][1] === postData.date) {
+        if (getSafeDni(data[i][0]) === String(postData.employeeId) && data[i][1] === postData.date) {
           foundRow = i + 1;
           break;
         }
@@ -245,7 +256,7 @@ function doPost(e) {
       // Evitar duplicados en la misma fecha y DNI: borrar la anterior
       let displayData = sheetJust.getDataRange().getDisplayValues();
       for (let i = displayData.length - 1; i > 0; i--) {
-        if (String(displayData[i][0]) === String(employeeId) && formatDateValue(displayData[i][1]) === formatDateValue(date)) {
+        if (getSafeDni(displayData[i][0]) === String(employeeId) && formatDateValue(displayData[i][1]) === formatDateValue(date)) {
           sheetJust.deleteRow(i + 1);
         }
       }
@@ -321,7 +332,7 @@ function doPost(e) {
     attendanceSheet.appendRow([
       formattedDate,            // 1. Fecha (A)
       formattedTime,            // 2. Hora (B)
-      postData.employeeId,      // 3. DNI (C)
+      "'" + postData.employeeId,      // 3. DNI (C)
       postData.employeeName,    // 4. Nombre Colaborador (D)
       action,                   // 5. Acción (E)
       postData.details || "Registrado vía AsistenciaPro Web", // 6. Detalles (F)
@@ -347,7 +358,7 @@ function getEmployeesData(ss) {
   
   for (var i = 1; i < data.length; i++) {
     employees.push({
-      dni: String(data[i][1]), // Columna B (Dni)
+      dni: getSafeDni(data[i][1]), // Columna B (Dni)
       name: data[i][2],        // Columna C (Nombre Completo)
       age: data[i][3],        // Columna D (Edad)
       gender: data[i][4],     // Columna E (Sexo)
@@ -376,7 +387,7 @@ function getJustificacionesData(ss) {
     if (eTime === "—") eTime = "";
 
     list.push({
-      dni: String(data[i][0]),
+      dni: getSafeDni(data[i][0]),
       dateStr: formatDateValue(data[i][1]),
       type: data[i][2],
       details: data[i][3],
@@ -411,7 +422,7 @@ function getHistoryData(ss, filterDni) {
   var history = [];
   
   for (var i = 1; i < data.length; i++) {
-    var dni = String(data[i][2]); // Columna C (DNI)
+    var dni = getSafeDni(data[i][2]); // Columna C (DNI)
     if (filterDni && dni !== String(filterDni)) continue;
     
     history.push({
@@ -438,7 +449,7 @@ function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
   // Buscamos en columna A (por si acaso quedó el formato horizontal anterior) y columna B (DNI oficial en formato vertical)
   var data = sheet.getDataRange().getValues();
   for (var i = data.length - 1; i > 0; i--) {
-    if (String(data[i][0]) === String(employeeId) || String(data[i][1]) === String(employeeId)) {
+    if (getSafeDni(data[i][0]) === String(employeeId) || String(data[i][1]) === String(employeeId)) {
       sheet.deleteRow(i + 1);
     }
   }
@@ -508,7 +519,7 @@ function deleteFromHorariosSheet(ss, employeeId) {
   
   var data = sheet.getDataRange().getValues();
   for (var i = data.length - 1; i > 0; i--) {
-    if (String(data[i][0]) === String(employeeId) || String(data[i][1]) === String(employeeId)) {
+    if (getSafeDni(data[i][0]) === String(employeeId) || getSafeDni(data[i][1]) === String(employeeId)) {
       sheet.deleteRow(i + 1);
     }
   }

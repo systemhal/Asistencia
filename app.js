@@ -6435,7 +6435,24 @@ function openAgentHistoryModal(isCurrentMonth = true) {
 let securityBlockMobile = false;
 let securityRestrictPcs = false;
 
+function isMobileDevice() {
+  // Detección multi-capa: user agent + ancho de pantalla + puntos táctiles
+  const uaMatch = /mobile|android|iphone|ipad|ipod|tablet|blackberry|windows phone|opera mini|silk/i.test(navigator.userAgent);
+  const smallScreen = window.screen.width <= 768;
+  const touchDevice = navigator.maxTouchPoints > 1;
+  // Un dispositivo móvil cumple al menos 2 de 3 criterios
+  const signals = [uaMatch, smallScreen, touchDevice].filter(Boolean).length;
+  return signals >= 2;
+}
 
+function lockBodyForSecurity(lock) {
+  // Hace la pantalla de bloqueo verdaderamente inescapable
+  document.body.style.overflow = lock ? 'hidden' : '';
+  const appRoot = document.getElementById('app') || document.querySelector('.app-wrapper');
+  if (appRoot) appRoot.style.pointerEvents = lock ? 'none' : '';
+  const blockScreen = document.getElementById('security-block-screen');
+  if (blockScreen) blockScreen.style.pointerEvents = lock ? 'all' : 'none';
+}
 
 function loadSecuritySettings() {
   securityBlockMobile = localStorage.getItem('security_block_mobile') === 'true';
@@ -6448,7 +6465,6 @@ function loadSecuritySettings() {
 }
 
 function validateDeviceSecurity() {
-  const isMobile = /mobile|android|iphone|ipad|tablet/i.test(navigator.userAgent);
   const blockScreen = document.getElementById('security-block-screen');
   const blockTitle = document.getElementById('security-title');
   const blockMessage = document.getElementById('security-message');
@@ -6459,9 +6475,9 @@ function validateDeviceSecurity() {
   const btnCancelAuth = document.getElementById('btn-security-cancel-auth');
   
   if (!blockScreen) return false;
-  
-  // Case 1: Mobile Lockout
-  if (securityBlockMobile && isMobile) {
+
+  // Case 1: Bloqueo de Móviles y Tablets
+  if (securityBlockMobile && isMobileDevice()) {
     blockTitle.textContent = "Dispositivo No Autorizado";
     blockMessage.innerHTML = "🚫 Por motivos de seguridad y control interno, <strong>el acceso al sistema desde celulares y tablets está bloqueado</strong>.<br><br>Por favor, utilice la computadora de escritorio designada en la oficina.";
     blockIcon.textContent = "smartphone";
@@ -6470,41 +6486,40 @@ function validateDeviceSecurity() {
       blockIconContainer.style.background = "rgba(239, 68, 68, 0.1)";
     }
     blockIcon.style.color = "#ef4444";
-    
     if (btnShowAuth) btnShowAuth.style.display = "none";
     if (authFormContainer) authFormContainer.style.display = "none";
-    
     blockScreen.classList.remove('hidden');
     blockScreen.style.display = "flex";
-    return true; // blocked
+    lockBodyForSecurity(true);
+    return true;
   }
-  
-  // Case 2: Restricted PCs
+
+  // Case 2: Restricción de PCs autorizadas
   if (securityRestrictPcs) {
-    const expectedToken = ADMIN_PASSWORD_HASH;
-    const currentToken = localStorage.getItem('asistencia_pc_auth_token');
-    
-    if (currentToken !== expectedToken) {
+    // El token válido es el hash de la contraseña de admin
+    const validToken = ADMIN_PASSWORD_HASH;
+    const storedToken = localStorage.getItem('asistencia_pc_auth_token');
+    if (storedToken !== validToken) {
       blockTitle.textContent = "Computadora No Registrada";
-      blockMessage.innerHTML = "🖥️ Esta computadora <strong>no cuenta con autorización</strong> para registrar asistencia en este terminal.<br><br>Pídale al administrador que autorice este navegador ingresando la contraseña.";
+      blockMessage.innerHTML = "🖥️ Esta computadora <strong>no cuenta con autorización</strong> para registrar asistencia en este terminal.<br><br>Pídale al administrador que autorice este navegador ingresando la contraseña de administrador.";
       blockIcon.textContent = "desktop_access_disabled";
       if (blockIconContainer) {
         blockIconContainer.style.borderColor = "#f59e0b";
         blockIconContainer.style.background = "rgba(245, 158, 11, 0.1)";
       }
       blockIcon.style.color = "#f59e0b";
-      
       if (btnShowAuth) btnShowAuth.style.display = "inline-flex";
-      
       blockScreen.classList.remove('hidden');
       blockScreen.style.display = "flex";
-      return true; // blocked
+      lockBodyForSecurity(true);
+      return true;
     }
   }
-  
-  // No block active
+
+  // Sin bloqueo activo: ocultar pantalla y desbloquear
   blockScreen.classList.add('hidden');
   blockScreen.style.display = "none";
+  lockBodyForSecurity(false);
   return false;
 }
 
