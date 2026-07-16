@@ -50,6 +50,12 @@ function generateAuthToken(password) {
 let currentSession = null; 
 let attendanceState = {}; 
 let globalLogs = []; 
+// Auto-sync: intervalos y estado de visibilidad
+let autoSyncInterval = null;
+const AUTO_SYNC_ADMIN_MS  = 60000;  // Panel Admin: cada 60 segundos
+const AUTO_SYNC_AGENT_MS  = 45000;  // Vista Agente: cada 45 segundos
+let isSyncing = false;              // Bandera para evitar peticiones solapadas
+
 let googleScriptUrl = "https://script.google.com/macros/s/AKfycbxh-EejSNaokvwz44x-HPemalHWKtnPsq51l4u8YJ1hOZgPJK6LvORA_YpzCoL8lHpKFg/exec";
 let tardinessTolerance = 5; 
 let cachedAgentHistory = [];
@@ -133,7 +139,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDeviceSecurityUIListeners();
   validateDeviceSecurity();
   updatePrintTimestamp();
-  syncInitialData();
+  syncInitialData().then(() => {
+    startAutoSync('admin');
+  });
 });
 
 /* ==========================================================================
@@ -397,6 +405,9 @@ function setupDashboardView() {
   renderPersonalLogs();
   renderEmployeeWeeklySummary(currentSession.dni);
   updateAgentGuideAndSchedule();
+
+  // Iniciar auto-sync en modo agente (liviano, solo su historial)
+  startAutoSync('agent');
 
   // Sincronizar el historial del empleado desde la nube para el resumen semanal y logs
   if (googleScriptUrl) {
@@ -885,6 +896,95 @@ function syncAllAttendanceStatesFromHistory() {
 }
 
 // Sincronización consolidada/unificada en una sola petición
+// ── AUTO-SYNC INTELIGENTE ──────────────────────────────────────────────────
+// Sincronización automática en segundo plano, sin saturar y respetando visibilidad de la página
+
+function startAutoSync(mode) {
+  stopAutoSync(); // Limpiar cualquier intervalo previo
+  if (!googleScriptUrl) return;
+
+  const delay = (mode === 'agent') ? AUTO_SYNC_AGENT_MS : AUTO_SYNC_ADMIN_MS;
+
+  autoSyncInterval = setInterval(() => {
+    // No sincronizar si la pestaña está oculta (ahorrar ancho de banda)
+    if (document.hidden) return;
+    // No solapar peticiones en curso
+    if (isSyncing) return;
+
+    isSyncing = true;
+
+    if (mode === 'agent' && currentSession) {
+      // MODO AGENTE: solo trae el historial del agente logueado (liviano)
+      fetch(`${googleScriptUrl}?action=get_history&dni=${currentSession.dni}`)
+        .then(res => res.json())
+        .then(res => {
+          if (res.status === "ok" && Array.isArray(res.data)) {
+            attendanceState[currentSession.dni].history = res.data;
+
+            const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+            const normToday = normalizeDateStr(todayStr);
+            const todayMarks = res.data.filter(item => normalizeDateStr(item.dateStr) === normToday);
+
+            if (todayMarks.length > 0) {
+              todayMarks.sort((a, b) => a.timestamp - b.timestamp);
+              const latestMark = todayMarks[todayMarks.length - 1];
+              attendanceState[currentSession.dni].action = latestMark.action;
+              attendanceState[currentSession.dni].timestamp = latestMark.timestamp;
+              updateDashboardStatusUI(latestMark.action);
+            } else {
+              attendanceState[currentSession.dni].action = 'Desconectado';
+              attendanceState[currentSession.dni].timestamp = null;
+              updateDashboardStatusUI('Desconectado');
+            }
+
+            saveState();
+            renderPersonalLogs();
+            renderEmployeeWeeklySummary(currentSession.dni);
+            updateAgentGuideAndSchedule();
+          }
+        })
+        .catch(() => {})
+        .finally(() => { isSyncing = false; });
+
+    } else if (mode === 'admin') {
+      // MODO ADMIN: sincronización completa pero silenciosa
+      syncInitialData()
+        .then(() => {
+          // Refrescar la vista del admin sin hacer scroll ni mostrar toast
+          updateAdminView();
+
+          // Si hay una pestaña de reporte o consolidado activa, recargarla también
+          const activeTab = document.querySelector('.tab-btn.active');
+          if (activeTab) {
+            const tabId = activeTab.getAttribute('data-tab');
+            if (tabId === 'reports') {
+              const select = document.getElementById('select-report-employee');
+              if (select && select.value) {
+                const emp = (select.value === 'all') ? 'all' : employeesDatabase[select.value];
+                if (emp) renderReportTable(cachedAgentHistory, emp);
+              }
+            } else if (tabId === 'consolidated') {
+              renderConsolidatedTable(cachedConsolidatedHistory);
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => { isSyncing = false; });
+    } else {
+      isSyncing = false;
+    }
+  }, delay);
+
+  console.log(`Auto-sync iniciado en modo "${mode}" cada ${delay / 1000}s.`);
+}
+
+function stopAutoSync() {
+  if (autoSyncInterval) {
+    clearInterval(autoSyncInterval);
+    autoSyncInterval = null;
+  }
+}
+
 function syncInitialData() {
   if (!googleScriptUrl) return Promise.resolve();
   
@@ -2088,6 +2188,13 @@ function autoClosePendingSessions() {
   const todayStr = today.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
   const normToday = normalizeDateStr(todayStr);
 
+  // Registro persistente de sesiones ya cerradas: { dni: 'DD/MM/YYYY' }
+  // Evita re-procesar la misma sesión en cada recarga de página
+  let alreadyClosed = {};
+  try {
+    alreadyClosed = JSON.parse(localStorage.getItem('autoclose_processed') || '{}');
+  } catch(e) { alreadyClosed = {}; }
+
   Object.keys(attendanceState).forEach(dni => {
     const state = attendanceState[dni];
     if (!state || !state.history || state.history.length === 0) return;
@@ -2095,54 +2202,68 @@ function autoClosePendingSessions() {
     // Ordenar historial para encontrar la marca más reciente
     state.history.sort((a, b) => a.timestamp - b.timestamp);
     const lastLog = state.history[state.history.length - 1];
+    const lastDateNorm = normalizeDateStr(lastLog.dateStr);
 
-    if (lastLog.action !== 'Salida' && normalizeDateStr(lastLog.dateStr) !== normToday) {
-      // Sesión de un día anterior dejada abierta. Auto-completar su salida a las 23:59:59.
-      const dateParts = lastLog.dateStr.split('/');
-      if (dateParts.length === 3) {
-        const day = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const year = parseInt(dateParts[2], 10);
+    // No procesar si:
+    // 1) La última acción ya es Salida
+    // 2) La última marca es de hoy
+    // 3) Esta sesión (dni + fecha) ya fue autocerrada antes
+    const alreadyKey = `${dni}_${lastDateNorm}`;
+    if (lastLog.action === 'Salida') return;
+    if (lastDateNorm === normToday) return;
+    if (alreadyClosed[alreadyKey]) return;
 
-        // Caso 1: Si se quedó en 'Inicio Refrigerio', cerrar refrigerio antes
-        if (lastLog.action === 'Inicio Refrigerio') {
-          const breakTime = new Date(year, month, day, 23, 59, 58);
-          const breakLog = {
-            action: 'Fin Refrigerio',
-            timestamp: breakTime.getTime(),
-            timeStr: '23:59:58',
-            dateStr: lastLog.dateStr,
-            details: 'Autocompletado a las 11:59:58pm',
-            device: 'Sistema'
-          };
-          state.history.push(breakLog);
-          if (googleScriptUrl) {
-            sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Fin Refrigerio', breakTime, true);
-          }
-        }
+    const dateParts = lastLog.dateStr.split('/');
+    if (dateParts.length !== 3) return;
 
-        // Caso 2 & 3: Cerrar jornada a las 23:59:59
-        const exitTime = new Date(year, month, day, 23, 59, 59);
-        const exitLog = {
-          action: 'Salida',
-          timestamp: exitTime.getTime(),
-          timeStr: '23:59:59',
-          dateStr: lastLog.dateStr,
-          details: 'Autocompletado a las 11:59:59pm',
-          device: 'Sistema'
-        };
-        state.history.push(exitLog);
-        state.action = 'Salida';
-        state.timestamp = exitTime.getTime();
+    const day   = parseInt(dateParts[0], 10);
+    const month = parseInt(dateParts[1], 10) - 1;
+    const year  = parseInt(dateParts[2], 10);
 
-        if (googleScriptUrl) {
-          sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Salida', exitTime, true);
-        }
-
-        stateChanged = true;
+    // Caso 1: Si se quedó en 'Inicio Refrigerio', cerrar refrigerio antes
+    if (lastLog.action === 'Inicio Refrigerio') {
+      const breakTime = new Date(year, month, day, 23, 59, 58);
+      const breakLog = {
+        action: 'Fin Refrigerio',
+        timestamp: breakTime.getTime(),
+        timeStr: '23:59:58',
+        dateStr: lastLog.dateStr,
+        details: 'Autocompletado por omisión',
+        device: 'Sistema'
+      };
+      state.history.push(breakLog);
+      if (googleScriptUrl) {
+        sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Fin Refrigerio', breakTime, true);
       }
     }
+
+    // Cerrar jornada a las 23:59:59 del día de la última marca
+    const exitTime = new Date(year, month, day, 23, 59, 59);
+    const exitLog = {
+      action: 'Salida',
+      timestamp: exitTime.getTime(),
+      timeStr: '23:59:59',
+      dateStr: lastLog.dateStr,
+      details: 'Autocompletado por omisión',
+      device: 'Sistema'
+    };
+    state.history.push(exitLog);
+    state.action = 'Salida';
+    state.timestamp = exitTime.getTime();
+
+    if (googleScriptUrl) {
+      sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Salida', exitTime, true);
+    }
+
+    // Marcar como procesado para no repetir en futuras recargas
+    alreadyClosed[alreadyKey] = true;
+    stateChanged = true;
   });
+
+  // Guardar el registro de sesiones ya cerradas
+  try {
+    localStorage.setItem('autoclose_processed', JSON.stringify(alreadyClosed));
+  } catch(e) {}
 
   if (stateChanged) {
     saveState();
