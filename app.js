@@ -137,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupMonthlyReportUIListeners();
   setupDailySummaryListeners();
   setupDeviceSecurityUIListeners();
+  setupGerencialListeners();
   validateDeviceSecurity();
   updatePrintTimestamp();
   syncInitialData().then(() => {
@@ -989,6 +990,7 @@ function syncInitialData() {
   if (!googleScriptUrl) return Promise.resolve();
   
   console.log("Iniciando sincronización unificada...");
+  updateCloudStatus('syncing');
   
   return fetch(`${googleScriptUrl}?action=get_initial_data`)
     .then(res => res.json())
@@ -1088,16 +1090,22 @@ function syncInitialData() {
         updateAdminView();
         updateReportEmployeeSelect();
         console.log("Sincronización unificada completada con éxito.");
+        updateCloudStatus('connected');
       } else {
         throw new Error("Formato de respuesta incorrecto");
       }
     })
     .catch(err => {
       console.warn("Fallo la sincronización unificada. Usando fallback individual...", err);
+      updateCloudStatus('syncing');
       return syncEmployeesFromGoogleSheets().then(() => {
         syncJustificacionesFromGoogleSheets();
         syncFeriadosFromGoogleSheets();
         syncAllAttendanceStatesFromHistory();
+        updateCloudStatus('connected');
+      }).catch(fallbackErr => {
+        updateCloudStatus('error');
+        throw fallbackErr;
       });
     });
 }
@@ -1267,6 +1275,7 @@ function setupEventListeners() {
       showToast('success', 'Admin autenticado', 'Bienvenido al panel de control general.');
       showView('admin');
       updateAdminView();
+      
       // Always refresh the URL input from localStorage when admin panel opens
       const savedUrl = localStorage.getItem('google_script_url');
       if (savedUrl && inputSheetUrl) {
@@ -1274,6 +1283,9 @@ function setupEventListeners() {
         googleScriptUrl = savedUrl;
         btnTestConnection.disabled = false;
       }
+      
+      // Trigger instant cloud sync upon entering admin dashboard
+      syncInitialData();
 
     } else {
       adminErrorMsg.classList.remove('hidden');
@@ -3790,6 +3802,10 @@ function setupAdminTabs() {
           monthInput.value = `${now.getFullYear()}-${monthStr}`;
         }
         loadMonthlyReport();
+      }
+
+      if (targetTab === 'gerencial') {
+        loadGerencialReport();
       }
     });
   });
@@ -6614,5 +6630,1281 @@ function setupDeviceSecurityUIListeners() {
         validateDeviceSecurity();
       }
     });
+  }
+}
+
+
+/* ==========================================================================
+   VISTA GERENCIAL — KPIs, Gráficos y Tablas
+   ========================================================================== */
+
+let gerencialChartDaily  = null;
+let gerencialChartAusentismo = null;
+let gerencialChartWeekly = null;
+let gerencialChartWeeklyTardiness = null;
+let gerencialChartRanking = null;
+let gerencialChartRankingTardanzas = null;
+let gerencialChartAlerts = null;
+
+function toLocalYMD(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getGroupKey(dateStr, grouping) {
+  const parts = dateStr.split('/');
+  const dObj = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+  
+  if (grouping === 'month') {
+    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    return monthNames[dObj.getMonth()];
+  } else if (grouping === 'week') {
+    const day = dObj.getDay() === 0 ? 6 : dObj.getDay() - 1; // lunes = 0
+    const monday = new Date(dObj);
+    monday.setDate(dObj.getDate() - day);
+    const dd = String(monday.getDate()).padStart(2, '0');
+    const mm = String(monday.getMonth() + 1).padStart(2, '0');
+    return `Sem ${dd}/${mm}`;
+  } else {
+    const dd = parts[0];
+    const mm = parts[1];
+    return `${dd}/${mm}`;
+  }
+}
+
+function setupGerencialListeners() {
+  const selectPeriod = document.getElementById('ger-select-period');
+  const selectGrouping = document.getElementById('ger-select-grouping');
+  const btnRefresh   = document.getElementById('btn-ger-refresh');
+  const startDateInput = document.getElementById('ger-start-date');
+  const endDateInput = document.getElementById('ger-end-date');
+
+  // Inicializar fechas con el mes actual si están vacías usando hora local
+  if (startDateInput && endDateInput && (!startDateInput.value || !endDateInput.value)) {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    startDateInput.value = toLocalYMD(firstDay);
+    endDateInput.value = toLocalYMD(today);
+  }
+
+  if (selectPeriod) {
+    selectPeriod.addEventListener('change', () => {
+      const today = new Date();
+      let start, end;
+
+      if (selectPeriod.value === 'this_week') {
+        const day = today.getDay() === 0 ? 6 : today.getDay() - 1; // lunes = 0
+        start = new Date(today); start.setDate(today.getDate() - day);
+        end   = new Date(today);
+      } else if (selectPeriod.value === 'last_week') {
+        const day = today.getDay() === 0 ? 6 : today.getDay() - 1;
+        end   = new Date(today); end.setDate(today.getDate() - day - 1);
+        start = new Date(end);   start.setDate(end.getDate() - 6);
+      } else if (selectPeriod.value === 'this_month') {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end   = new Date(today);
+      } else if (selectPeriod.value === 'last_month') {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end   = new Date(today.getFullYear(), today.getMonth(), 0);
+      }
+
+      if (selectPeriod.value !== 'custom' && start && end) {
+        startDateInput.value = toLocalYMD(start);
+        endDateInput.value = toLocalYMD(end);
+        loadGerencialReport();
+      }
+    });
+  }
+
+  if (selectGrouping) {
+    selectGrouping.addEventListener('change', loadGerencialReport);
+  }
+
+  // Si cambia manualmente el input de fecha, cambiar periodo a "Personalizado"
+  const onManualDateChange = () => {
+    if (selectPeriod) selectPeriod.value = 'custom';
+  };
+  if (startDateInput) startDateInput.addEventListener('change', onManualDateChange);
+  if (endDateInput) endDateInput.addEventListener('change', onManualDateChange);
+
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', loadGerencialReport);
+  }
+
+  // También recargar al cambiar colaborador
+  const selectEmp = document.getElementById('ger-select-employee');
+  if (selectEmp) {
+    selectEmp.addEventListener('change', loadGerencialReport);
+  }
+
+  // Recargar al cambiar el tipo de horario
+  const selectSchedType = document.getElementById('ger-select-schedule-type');
+  if (selectSchedType) {
+    selectSchedType.addEventListener('change', () => {
+      const selectEmp = document.getElementById('ger-select-employee');
+      if (selectEmp) selectEmp.value = 'all'; // Resetear a todos
+      updateGerencialEmployeeSelect();
+      loadGerencialReport();
+    });
+  }
+}
+
+function getGerencialDateRange() {
+  const sv = document.getElementById('ger-start-date')?.value;
+  const ev = document.getElementById('ger-end-date')?.value;
+  const today = new Date();
+  const start = sv ? new Date(sv + 'T00:00:00') : new Date(today.getFullYear(), today.getMonth(), 1);
+  const end   = ev ? new Date(ev + 'T23:59:59') : new Date(today);
+  return { start, end };
+}
+
+function isWorkDay(dateObj) {
+  // Lunes(1) a Sábado(6) que no sean feriado
+  const dow = dateObj.getDay();
+  if (dow === 0) return false;
+  const dd = String(dateObj.getDate()).padStart(2,'0');
+  const mm = String(dateObj.getMonth()+1).padStart(2,'0');
+  const yyyy = dateObj.getFullYear();
+  const dayMonthStr = dd + '/' + mm;
+  const fullStr = dd + '/' + mm + '/' + yyyy;
+  const isGlobalHoliday = GLOBAL_FERIADOS.some(f => f === dayMonthStr);
+  const isCustomHoliday = feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(fullStr));
+  return !isGlobalHoliday && !isCustomHoliday;
+}
+
+function getWorkDaysInRange(start, end) {
+  const days = [];
+  const cur = new Date(start); cur.setHours(12,0,0,0);
+  const endD = new Date(end);  endD.setHours(12,0,0,0);
+  while (cur <= endD) {
+    if (isWorkDay(cur)) {
+      const dd = String(cur.getDate()).padStart(2,'0');
+      const mm = String(cur.getMonth()+1).padStart(2,'0');
+      const yyyy = cur.getFullYear();
+      days.push(dd + '/' + mm + '/' + yyyy);
+    }
+    cur.setDate(cur.getDate() + 1);
+    cur.setHours(12,0,0,0); // Evitar drifts por zona horaria en iteración
+  }
+  return days;
+}
+
+function updateGerencialEmployeeSelect() {
+  const sel = document.getElementById('ger-select-employee');
+  if (!sel) return;
+  const schedType = document.getElementById('ger-select-schedule-type')?.value || 'fixed';
+  const current = sel.value;
+  sel.innerHTML = '<option value="all">Todos los colaboradores</option>';
+  Object.keys(employeesDatabase)
+    .filter(dni => {
+      const emp = employeesDatabase[dni];
+      if (!emp) return false;
+      const isFlexible = (emp.weeklySchedule === 'flexible' || emp.workStart === '-' || emp.workStart === '—');
+      if (schedType === 'fixed') return !isFlexible;
+      if (schedType === 'flexible') return isFlexible;
+      return true; // all
+    })
+    .sort((a,b) => employeesDatabase[a].name.localeCompare(employeesDatabase[b].name))
+    .forEach(dni => {
+      const opt = document.createElement('option');
+      opt.value = dni;
+      opt.textContent = employeesDatabase[dni].name;
+      sel.appendChild(opt);
+    });
+  if (current && sel.querySelector(`option[value="${current}"]`)) sel.value = current;
+}
+
+function loadGerencialReport() {
+  updateGerencialEmployeeSelect();
+  const { start, end } = getGerencialDateRange();
+  const filterDni = document.getElementById('ger-select-employee')?.value || 'all';
+
+  // Historial normalizado
+  cachedConsolidatedHistory = getAllCachedHistory();
+  const allHistory = cachedConsolidatedHistory;
+  const normalized = allHistory.map(item => {
+    const nd = normalizeDateStr(item.dateStr);
+    const nt = normalizeTimeStr(item.timeStr);
+    return { ...item, dni: String(item.dni || '').trim(), dateStr: nd, timeStr: nt, timestamp: getTimestampFromDateAndTime(nd, nt) };
+  }).filter(item => {
+    if (!item.dni || !employeesDatabase[item.dni]) return false;
+    if (filterDni !== 'all' && String(item.dni) !== String(filterDni)) return false;
+    const d = new Date(item.timestamp || getTimestampFromDateAndTime(item.dateStr, item.timeStr));
+    return d >= start && d <= end;
+  });
+
+  // Colaboradores en scope según tipo de horario seleccionado
+  const schedType = document.getElementById('ger-select-schedule-type')?.value || 'fixed';
+  const dnis = (filterDni === 'all' ? Object.keys(employeesDatabase) : [filterDni])
+    .filter(dni => {
+      const emp = employeesDatabase[dni];
+      if (!emp) return false;
+      const isFlexible = (emp.weeklySchedule === 'flexible' || emp.workStart === '-' || emp.workStart === '—');
+      if (schedType === 'fixed') return !isFlexible;
+      if (schedType === 'flexible') return isFlexible;
+      return true; // all
+    });
+  const workDays = getWorkDaysInRange(start, end);
+
+  // Generar todos los días del calendario en el rango para sumar horas/tardanzas
+  const allCalendarDays = [];
+  let curr = new Date(start);
+  while (curr <= end) {
+    const dd = String(curr.getDate()).padStart(2, '0');
+    const mm = String(curr.getMonth() + 1).padStart(2, '0');
+    const yyyy = curr.getFullYear();
+    allCalendarDays.push(`${dd}/${mm}/${yyyy}`);
+    const nextDate = new Date(curr);
+    nextDate.setDate(nextDate.getDate() + 1);
+    nextDate.setHours(12, 0, 0, 0);
+    curr = nextDate;
+  }
+
+  // --- Calcular KPIs por colaborador ---
+  const perEmployee = {};
+  dnis.forEach(dni => {
+    perEmployee[dni] = { attended: new Set(), late: 0, faltas: 0, workedSecs: 0, tardanzaSecs: 0 };
+  });
+
+  // Agrupar marcas por dni+fecha
+  const marksByDniDate = {};
+  normalized.forEach(item => {
+    if (!perEmployee[item.dni]) return;
+    const key = item.dni + '|' + item.dateStr;
+    if (!marksByDniDate[key]) marksByDniDate[key] = [];
+    marksByDniDate[key].push(item);
+  });
+
+  const todayYMD = toLocalYMD(new Date());
+
+  // Por cada día del calendario y colaborador calcular asistencia, tardanza y horas
+  allCalendarDays.forEach(dateStr => {
+    const parts = dateStr.split('/');
+    const dStrYMD = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+
+    dnis.forEach(dni => {
+      const emp = employeesDatabase[dni];
+      const dObj = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+      const dow = String(dObj.getDay()); // 0=Dom...6=Sab
+
+      // Determinar si es feriado
+      let isHoliday = false;
+      const dayMonth = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}`;
+      if (GLOBAL_FERIADOS.includes(dayMonth)) {
+        isHoliday = true;
+      } else if (feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr))) {
+        isHoliday = true;
+      }
+
+      // Determinar si según horario o fallback, este día está programado (debe trabajar)
+      let scheduled = false;
+      let daySchedObj = null;
+      if (emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+        try {
+          let sched = emp.weeklySchedule;
+          if (typeof sched === 'string') {
+            sched = JSON.parse(sched);
+          }
+          const daySched = sched[dow];
+          if (daySched && !daySched.isRestDay) {
+            scheduled = true;
+            daySchedObj = daySched;
+          }
+        } catch(e) {}
+      } else {
+        // Fallback: lunes a sábado no feriado es laborable
+        if (dow !== '0' && !isHoliday) {
+          scheduled = true;
+        }
+      }
+
+      const key = dni + '|' + dateStr;
+      const dayMarks = marksByDniDate[key] || [];
+      const ingreso = dayMarks.find(m => m.action === 'Ingreso');
+
+      if (ingreso) {
+        if (scheduled) {
+          perEmployee[dni].attended.add(dateStr);
+        }
+        const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
+        perEmployee[dni].workedSecs += report.workedSeconds;
+        if (report.tardiness) {
+          perEmployee[dni].late++;
+          perEmployee[dni].tardanzaSecs += report.tardinessSeconds;
+        }
+      } else if (scheduled) {
+        // Ausente en día programado — verificar si hoy ya terminó o es un día pasado
+        let evaluateThisDay = false;
+        if (dStrYMD < todayYMD) {
+          evaluateThisDay = true;
+        } else if (dStrYMD === todayYMD) {
+          const now = new Date();
+          const workEndStr = (daySchedObj && daySchedObj.workEnd) || emp.workEnd || '17:00';
+          const [eh, em] = workEndStr.split(':').map(Number);
+          if ((now.getHours() * 60 + now.getMinutes()) >= (eh * 60 + em)) {
+            evaluateThisDay = true;
+          }
+        }
+
+        if (evaluateThisDay) {
+          // Si no tiene justificación, es falta
+          const hasJust = justificacionesDatabase.some(j => String(j.dni) === String(dni) && normalizeDateStr(j.dateStr) === dateStr);
+          if (!hasJust) {
+            perEmployee[dni].faltas++;
+          }
+        }
+      }
+    });
+  });
+
+  // Totales globales
+  let totalDiasEsperados = 0, totalDiasAsistidos = 0, totalTardanzas = 0, totalFaltas = 0, totalWorkedSecs = 0;
+  let totalIngresos = 0;
+  let totalTardanzaSecs = 0;
+  
+  dnis.forEach(dni => {
+    const emp = employeesDatabase[dni];
+    let diasEsp = 0;
+    
+    allCalendarDays.forEach(dateStr => {
+      const parts = dateStr.split('/');
+      const dStrYMD = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+      const dObj = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+      const dow = String(dObj.getDay());
+
+      let isHoliday = false;
+      const dayMonth = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}`;
+      if (GLOBAL_FERIADOS.includes(dayMonth)) {
+        isHoliday = true;
+      } else if (feriadosDatabase.some(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr))) {
+        isHoliday = true;
+      }
+
+      let scheduled = false;
+      let daySchedObj = null;
+      if (emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+        try {
+          let sched = emp.weeklySchedule;
+          if (typeof sched === 'string') {
+            sched = JSON.parse(sched);
+          }
+          const daySched = sched[dow];
+          if (daySched && !daySched.isRestDay) {
+            scheduled = true;
+            daySchedObj = daySched;
+          }
+        } catch(e) {}
+      } else {
+        if (dow !== '0' && !isHoliday) {
+          scheduled = true;
+        }
+      }
+      if (!scheduled) return;
+
+      // Solo contar como día esperado si se evaluó (pasado o hoy marcado/terminado)
+      let evaluateThisDay = false;
+      if (dStrYMD < todayYMD) {
+        evaluateThisDay = true;
+      } else if (dStrYMD === todayYMD) {
+        const key = dni + '|' + dateStr;
+        const hasIngreso = (marksByDniDate[key] || []).some(m => m.action === 'Ingreso');
+        if (hasIngreso) {
+          evaluateThisDay = true;
+        } else {
+          const now = new Date();
+          const workEndStr = (daySchedObj && daySchedObj.workEnd) || emp.workEnd || '17:00';
+          const [eh, em] = workEndStr.split(':').map(Number);
+          if ((now.getHours() * 60 + now.getMinutes()) >= (eh * 60 + em)) {
+            evaluateThisDay = true;
+          }
+        }
+      }
+
+      if (evaluateThisDay) {
+        diasEsp++;
+      }
+    });
+    
+    totalDiasEsperados += diasEsp;
+    totalDiasAsistidos += perEmployee[dni].attended.size;
+    totalTardanzas     += perEmployee[dni].late;
+    totalFaltas        += perEmployee[dni].faltas;
+    totalWorkedSecs    += perEmployee[dni].workedSecs;
+    totalIngresos      += perEmployee[dni].attended.size;
+    totalTardanzaSecs  += perEmployee[dni].tardanzaSecs;
+  });
+
+  const pctAsistencia  = totalDiasEsperados > 0 ? ((totalDiasAsistidos / totalDiasEsperados) * 100).toFixed(1) : 0;
+  const pctAusentismo  = totalDiasEsperados > 0 ? ((totalFaltas / totalDiasEsperados) * 100).toFixed(1) : 0;
+  const pctPuntualidad = totalIngresos > 0 ? (((totalIngresos - totalTardanzas) / totalIngresos) * 100).toFixed(1) : 0;
+
+  // Formatear etiquetas según filtro de colaborador
+  let finalHorasLabel = '';
+  let finalTardanzasLabel = '';
+  const horasTot = Math.floor(totalWorkedSecs / 3600);
+  const minsTot  = Math.floor((totalWorkedSecs % 3600) / 60);
+
+  if (filterDni === 'all') {
+    finalHorasLabel = formatSecondsToHHMMSS(totalWorkedSecs);
+    finalTardanzasLabel = totalTardanzaSecs > 0 ? formatSecondsToHHMMSS(totalTardanzaSecs) : '00:00:00';
+  } else {
+    finalHorasLabel = `${horasTot}h ${minsTot}m`;
+    const tardanzasHoras = Math.floor(totalTardanzaSecs / 3600);
+    const tardanzasMins  = Math.floor((totalTardanzaSecs % 3600) / 60);
+    if (tardanzasHoras > 0) {
+      finalTardanzasLabel = `${tardanzasHoras}h ${tardanzasMins}m`;
+    } else {
+      finalTardanzasLabel = `${tardanzasMins}m`;
+    }
+  }
+
+  // Tardanzas promedio
+  const avgTardanzaSecs = totalTardanzas > 0 ? (totalTardanzaSecs / totalTardanzas) : 0;
+  const avgTardanzaMins = Math.round(avgTardanzaSecs / 60);
+  const tardanzasSubLabel = totalTardanzas > 0 
+    ? `promedio ${avgTardanzaMins}m en ${totalTardanzas} tardanzas`
+    : `0 tardanzas registradas`;
+
+  // --- Actualizar KPI Cards ---
+  function setKpi(id, val, sub) {
+    const el = document.getElementById('kpi-val-' + id);
+    const subEl = document.getElementById('kpi-sub-' + id);
+    if (el) el.textContent = val;
+    if (subEl && sub) subEl.textContent = sub;
+  }
+  setKpi('asistencia',  pctAsistencia + '%',  totalDiasAsistidos + ' días presentes de ' + totalDiasEsperados + ' esperados');
+  setKpi('ausentismo',  pctAusentismo + '%',  totalFaltas + ' faltas en el período');
+  setKpi('puntualidad', pctPuntualidad + '%', (totalIngresos - totalTardanzas) + ' puntuales de ' + totalIngresos + ' ingresos');
+  setKpi('horas',       finalHorasLabel,       'promedio ' + (dnis.length > 0 ? (horasTot / dnis.length).toFixed(1) : 0) + 'h/colaborador');
+  setKpi('tardanzas',   finalTardanzasLabel,   tardanzasSubLabel);
+
+  // --- Gráficos ---
+  renderGerencialChartAusentismo(dnis, workDays, marksByDniDate, perEmployee);
+  renderGerencialChartDaily(dnis, workDays, marksByDniDate, perEmployee);
+  renderGerencialRankingPuntualidad(dnis, perEmployee);
+  renderGerencialRankingTardanzas(dnis, perEmployee);
+}
+
+function renderGerencialChartAusentismo(dnis, workDays, marksByDniDate, perEmployee) {
+  const ctx = document.getElementById('chart-daily-ausentismo');
+  if (!ctx) return;
+  if (gerencialChartAusentismo) { gerencialChartAusentismo.destroy(); gerencialChartAusentismo = null; }
+
+  const grouping = document.getElementById('ger-select-grouping')?.value || 'day';
+  const sourceDays = (grouping === 'day') ? workDays.slice(-30) : workDays;
+
+  const labels = [];
+  const dayToGroupMap = {};
+  sourceDays.forEach(dateStr => {
+    const key = getGroupKey(dateStr, grouping);
+    if (!labels.includes(key)) {
+      labels.push(key);
+    }
+    dayToGroupMap[dateStr] = key;
+  });
+
+  const groupFaltas = {};
+  const groupProgramados = {};
+  labels.forEach(k => {
+    groupFaltas[k] = 0;
+    groupProgramados[k] = 0;
+  });
+
+  sourceDays.forEach(dateStr => {
+    const gKey = dayToGroupMap[dateStr];
+    dnis.forEach(dni => {
+      const emp = employeesDatabase[dni];
+      const parts = dateStr.split('/');
+      const dObj = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+      const dow = String(dObj.getDay());
+      let scheduled = true;
+      if (emp && emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+        try {
+          const sched = (typeof emp.weeklySchedule === 'string') ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule;
+          const daySched = sched[dow];
+          if (!daySched || daySched.isRestDay) scheduled = false;
+        } catch(e) {}
+      }
+      if (!scheduled) return;
+
+      groupProgramados[gKey]++;
+      const key = dni + '|' + dateStr;
+      const dayMarks = marksByDniDate[key] || [];
+      const ingreso = dayMarks.find(m => m.action === 'Ingreso');
+      if (!ingreso) {
+        const hasJust = justificacionesDatabase.some(j => String(j.dni) === String(dni) && normalizeDateStr(j.dateStr) === dateStr);
+        if (!hasJust) groupFaltas[gKey]++;
+      }
+    });
+  });
+
+  const faltasData = labels.map(k => groupFaltas[k]);
+  const ausentismoData = labels.map(k => {
+    const prog = groupProgramados[k];
+    const falt = groupFaltas[k];
+    return prog > 0 ? +((falt / prog) * 100).toFixed(1) : 0;
+  });
+
+  const isDark = document.body.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark' || !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  gerencialChartAusentismo = new Chart(ctx, {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Faltas',
+          data: faltasData,
+          type: 'line',
+          borderColor: 'rgba(252, 165, 165, 0.9)',
+          backgroundColor: 'rgba(252, 165, 165, 0.1)',
+          tension: 0.3,
+          fill: false,
+          pointBackgroundColor: 'rgba(252, 165, 165, 0.9)',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          yAxisID: 'y',
+          order: 1,
+          datalabels: {
+            anchor: 'end',
+            align: 'top',
+            color: 'rgba(252, 165, 165, 0.9)',
+            font: { weight: 'bold', size: 10 },
+            formatter: function(value) {
+              return value > 0 ? value : '';
+            }
+          }
+        },
+        {
+          label: '% Ausentismo',
+          data: ausentismoData,
+          type: 'bar',
+          backgroundColor: '#dc2626',
+          borderRadius: 4,
+          barPercentage: 0.85,
+          categoryPercentage: 0.9,
+          yAxisID: 'y1',
+          order: 2,
+          datalabels: {
+            anchor: 'center',
+            align: 'center',
+            backgroundColor: function(context) {
+              const val = context.dataset.data[context.dataIndex];
+              return val > 0 ? 'rgba(15, 23, 42, 0.65)' : 'transparent';
+            },
+            borderRadius: 3,
+            padding: { top: 2, bottom: 2, left: 4, right: 4 },
+            color: '#ffffff',
+            font: { weight: 'bold', size: 9 },
+            formatter: function(value) {
+              return value > 0 ? value + '%' : '';
+            }
+          }
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          top: 15
+        }
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 11 }, boxWidth: 12 } },
+        datalabels: {},
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              if (context.dataset.yAxisID === 'y1') {
+                return ` ${context.dataset.label}: ${context.raw}%`;
+              }
+              return ` ${context.dataset.label}: ${context.raw}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+        y: {
+          position: 'left',
+          beginAtZero: true,
+          max: (() => {
+            const raw = Math.ceil(Math.max(...faltasData, 3) * 2);
+            return raw % 2 === 0 ? raw : raw + 1;
+          })(),
+          ticks: { color: 'rgba(252, 165, 165, 0.9)', precision: 0, font: { size: 10 } },
+          grid: { color: gridColor },
+          title: { display: false }
+        },
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          max: 120,
+          ticks: { color: '#dc2626', callback: v => v + '%', font: { size: 10 } },
+          grid: { drawOnChartArea: false },
+          title: { display: false }
+        }
+      }
+    }
+  });
+}
+
+function renderGerencialChartDaily(dnis, workDays, marksByDniDate, perEmployee) {
+  const ctx = document.getElementById('chart-daily-attendance');
+  if (!ctx) return;
+  if (gerencialChartDaily) { gerencialChartDaily.destroy(); gerencialChartDaily = null; }
+
+  const grouping = document.getElementById('ger-select-grouping')?.value || 'day';
+  const sourceDays = (grouping === 'day') ? workDays.slice(-30) : workDays;
+
+  const labels = [];
+  const dayToGroupMap = {};
+  sourceDays.forEach(dateStr => {
+    const key = getGroupKey(dateStr, grouping);
+    if (!labels.includes(key)) {
+      labels.push(key);
+    }
+    dayToGroupMap[dateStr] = key;
+  });
+
+  const groupIngresos = {};
+  const groupPuntuales = {};
+  labels.forEach(k => {
+    groupIngresos[k] = 0;
+    groupPuntuales[k] = 0;
+  });
+
+  const daysTracked = {};
+
+  sourceDays.forEach(dateStr => {
+    const gKey = dayToGroupMap[dateStr];
+    if (!daysTracked[gKey]) daysTracked[gKey] = new Set();
+    daysTracked[gKey].add(dateStr);
+
+    dnis.forEach(dni => {
+      const emp = employeesDatabase[dni];
+      const parts = dateStr.split('/');
+      const dObj = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+      const dow = String(dObj.getDay());
+      let scheduled = true;
+      if (emp && emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+        try {
+          const sched = (typeof emp.weeklySchedule === 'string') ? JSON.parse(emp.weeklySchedule) : emp.weeklySchedule;
+          const daySched = sched[dow];
+          if (!daySched || daySched.isRestDay) scheduled = false;
+        } catch(e) {}
+      }
+      if (!scheduled) return;
+
+      const key = dni + '|' + dateStr;
+      const dayMarks = marksByDniDate[key] || [];
+      const ingreso = dayMarks.find(m => m.action === 'Ingreso');
+      if (ingreso) {
+        groupIngresos[gKey]++;
+        const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
+        if (!report.tardiness) groupPuntuales[gKey]++;
+      }
+    });
+  });
+
+  const puntualesData = labels.map(k => {
+    const totalDays = daysTracked[k] ? daysTracked[k].size : 1;
+    const avg = groupPuntuales[k] / totalDays;
+    return Math.round(avg);
+  });
+  const puntualidadData = labels.map(k => {
+    const ing = groupIngresos[k];
+    const punt = groupPuntuales[k];
+    return ing > 0 ? +((punt / ing) * 100).toFixed(1) : 0;
+  });
+
+  const isDark = document.body.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark' || !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  gerencialChartDaily = new Chart(ctx, {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Ingresos Puntuales',
+          data: puntualesData,
+          type: 'line',
+          borderColor: 'rgba(147, 197, 253, 0.9)',
+          backgroundColor: 'rgba(147, 197, 253, 0.1)',
+          tension: 0.3,
+          fill: false,
+          pointBackgroundColor: 'rgba(147, 197, 253, 0.9)',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          yAxisID: 'y',
+          order: 1,
+          datalabels: {
+            anchor: 'end',
+            align: 'top',
+            color: 'rgba(147, 197, 253, 0.9)',
+            font: { weight: 'bold', size: 10 },
+            formatter: function(value) {
+              return value > 0 ? value : '';
+            }
+          }
+        },
+        {
+          label: '% Puntualidad',
+          data: puntualidadData,
+          type: 'bar',
+          backgroundColor: '#2563eb',
+          borderRadius: 4,
+          barPercentage: 0.85,
+          categoryPercentage: 0.9,
+          yAxisID: 'y1',
+          order: 2,
+          datalabels: {
+            anchor: 'center',
+            align: 'center',
+            backgroundColor: function(context) {
+              const val = context.dataset.data[context.dataIndex];
+              return val > 0 ? 'rgba(15, 23, 42, 0.65)' : 'transparent';
+            },
+            borderRadius: 3,
+            padding: { top: 2, bottom: 2, left: 4, right: 4 },
+            color: '#ffffff',
+            font: { weight: 'bold', size: 9 },
+            formatter: function(value) {
+              return value > 0 ? value + '%' : '';
+            }
+          }
+        },
+        {
+          label: 'Meta (95%)',
+          data: puntualidadData.map(() => 95),
+          type: 'line',
+          borderColor: 'rgba(34,197,94,0.6)',
+          borderDash: [6,4],
+          pointRadius: 0,
+          borderWidth: 2,
+          fill: false,
+          yAxisID: 'y1',
+          order: 0,
+          datalabels: { display: false }
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          top: 15
+        }
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 11 }, boxWidth: 12 } },
+        datalabels: {},
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              if (context.dataset.yAxisID === 'y1') {
+                return ` ${context.dataset.label}: ${context.raw}%`;
+              }
+              return ` ${context.dataset.label}: ${context.raw}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+        y: {
+          position: 'left',
+          beginAtZero: true,
+          max: (() => {
+            const raw = Math.ceil(Math.max(...puntualesData, 3) * 2);
+            return raw % 2 === 0 ? raw : raw + 1;
+          })(),
+          ticks: {
+            color: 'rgba(147, 197, 253, 0.9)',
+            precision: 0,
+            stepSize: 2,
+            font: { size: 10 }
+          },
+          grid: { color: gridColor },
+          title: { display: false }
+        },
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          max: 120,
+          ticks: { color: '#2563eb', callback: v => v + '%', font: { size: 10 } },
+          grid: { drawOnChartArea: false },
+          title: { display: false }
+        }
+      }
+    }
+  });
+}
+
+function renderGerencialChartWeekly(dnis, start, end, marksByDniDate, perEmployee) {
+  const ctx = document.getElementById('chart-weekly-trend');
+  if (!ctx) return;
+  if (gerencialChartWeekly) { gerencialChartWeekly.destroy(); gerencialChartWeekly = null; }
+
+  // Agrupar por semana ISO
+  const weekMap = {};
+  const cur = new Date(start); cur.setHours(12,0,0,0);
+  const endD = new Date(end);   endD.setHours(12,0,0,0);
+  
+  while (cur <= endD) {
+    if (isWorkDay(cur)) {
+      const dd = String(cur.getDate()).padStart(2,'0');
+      const mm = String(cur.getMonth()+1).padStart(2,'0');
+      const yyyy = cur.getFullYear();
+      const dateStr = dd+'/'+mm+'/'+yyyy;
+      // Semana: lunes de esa semana
+      const dayOfWeek = cur.getDay() === 0 ? 6 : cur.getDay() - 1;
+      const monday = new Date(cur); monday.setDate(cur.getDate() - dayOfWeek);
+      const weekKey = String(monday.getDate()).padStart(2,'0') + '/' + String(monday.getMonth()+1).padStart(2,'0');
+      if (!weekMap[weekKey]) weekMap[weekKey] = { dias: 0, faltas: 0, ingresos: 0, tardanzas: 0 };
+      
+      dnis.forEach(dni => {
+        const emp = employeesDatabase[dni];
+        const dow = String(cur.getDay());
+        let scheduled = true;
+        if (emp && emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+          try {
+            let sched = emp.weeklySchedule;
+            if (typeof sched === 'string') {
+              sched = JSON.parse(sched);
+            }
+            const daySched = sched[dow];
+            if (!daySched || daySched.isRestDay) scheduled = false;
+          } catch(e) {}
+        }
+        if (!scheduled) return; // Ignorar si no estaba programado
+
+        weekMap[weekKey].dias++;
+        const key = dni + '|' + dateStr;
+        const dayMarks = marksByDniDate[key] || [];
+        const ingreso = dayMarks.find(m => m.action === 'Ingreso');
+        if (ingreso) {
+          weekMap[weekKey].ingresos++;
+          const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
+          if (report.tardiness) weekMap[weekKey].tardanzas++;
+        } else {
+          const hasJust = justificacionesDatabase.some(j => String(j.dni) === String(dni) && normalizeDateStr(j.dateStr) === dateStr);
+          if (!hasJust) weekMap[weekKey].faltas++;
+        }
+      });
+    }
+    cur.setDate(cur.getDate() + 1);
+    cur.setHours(12,0,0,0);
+  }
+
+  const weeks = Object.keys(weekMap).sort((a,b) => {
+    const [da, ma] = a.split('/').map(Number);
+    const [db, mb] = b.split('/').map(Number);
+    if (ma !== mb) return ma - mb;
+    return da - db;
+  });
+  const pcts = weeks.map(w => {
+    const ing = weekMap[w].ingresos;
+    const tard = weekMap[w].tardanzas;
+    return ing > 0 ? +(((ing - tard) / ing) * 100).toFixed(1) : 100.0;
+  });
+
+  const isDark = document.body.classList.contains('dark') || !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  gerencialChartWeekly = new Chart(ctx, {
+    type: 'line',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: weeks.map(w => 'Sem ' + w),
+      datasets: [{
+        label: '% Puntualidad',
+        data: pcts,
+        borderColor: '#a855f7',
+        backgroundColor: 'rgba(168,85,247,0.1)',
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: '#a855f7',
+        pointRadius: 5
+      }, {
+        label: 'Meta (95%)',
+        data: weeks.map(() => 95),
+        borderColor: 'rgba(34,197,94,0.6)',
+        borderDash: [6,4],
+        pointRadius: 0,
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 11 }, boxWidth: 12 } },
+        datalabels: {
+          display: false
+        }
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+        y: { beginAtZero: true, ticks: { color: textColor, callback: v => v + '%' }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
+function renderGerencialChartWeeklyTardiness(dnis, start, end, marksByDniDate) {
+  const ctx = document.getElementById('chart-weekly-tardiness');
+  if (!ctx) return;
+  if (gerencialChartWeeklyTardiness) { gerencialChartWeeklyTardiness.destroy(); gerencialChartWeeklyTardiness = null; }
+
+  const weekMap = {};
+  const weeksList = [];
+  const cur = new Date(start); cur.setHours(12,0,0,0);
+  const endD = new Date(end);   endD.setHours(12,0,0,0);
+  
+  while (cur <= endD) {
+    if (isWorkDay(cur)) {
+      const dd = String(cur.getDate()).padStart(2,'0');
+      const mm = String(cur.getMonth()+1).padStart(2,'0');
+      const yyyy = cur.getFullYear();
+      const dateStr = dd+'/'+mm+'/'+yyyy;
+      
+      const dayOfWeek = cur.getDay() === 0 ? 6 : cur.getDay() - 1;
+      const monday = new Date(cur); monday.setDate(cur.getDate() - dayOfWeek);
+      const weekKey = String(monday.getDate()).padStart(2,'0') + '/' + String(monday.getMonth()+1).padStart(2,'0');
+      
+      if (!weekMap[weekKey]) {
+        weekMap[weekKey] = {};
+        weeksList.push(weekKey);
+      }
+      
+      dnis.forEach(dni => {
+        if (!weekMap[weekKey][dni]) {
+          weekMap[weekKey][dni] = { count: 0, seconds: 0 };
+        }
+        const emp = employeesDatabase[dni];
+        const key = dni + '|' + dateStr;
+        const dayMarks = marksByDniDate[key] || [];
+        const ingreso = dayMarks.find(m => m.action === 'Ingreso');
+        
+        if (ingreso) {
+          let scheduled = false;
+          const dow = String(cur.getDay());
+          if (emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+            try {
+              let sched = emp.weeklySchedule;
+              if (typeof sched === 'string') sched = JSON.parse(sched);
+              const daySched = sched[dow];
+              if (daySched && !daySched.isRestDay) scheduled = true;
+            } catch(e) {}
+          } else {
+            if (dow !== '0') scheduled = true;
+          }
+          
+          if (scheduled) {
+            const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
+            if (report.tardiness) {
+              weekMap[weekKey][dni].count++;
+              weekMap[weekKey][dni].seconds += report.tardinessSeconds;
+            }
+          }
+        }
+      });
+    }
+    cur.setDate(cur.getDate() + 1);
+    cur.setHours(12,0,0,0);
+  }
+
+  const sortedWeeks = weeksList.filter((v, i, a) => a.indexOf(v) === i).sort((a,b) => {
+    const [da, ma] = a.split('/').map(Number);
+    const [db, mb] = b.split('/').map(Number);
+    if (ma !== mb) return ma - mb;
+    return da - db;
+  });
+
+  const colorsList = [
+    'rgba(249, 115, 22, 0.75)',  // orange
+    'rgba(168, 85, 247, 0.75)',  // purple
+    'rgba(59, 130, 246, 0.75)',  // blue
+    'rgba(236, 72, 153, 0.75)',  // pink
+    'rgba(20, 184, 166, 0.75)',  // teal
+    'rgba(234, 179, 8, 0.75)',   // yellow
+    'rgba(99, 102, 241, 0.75)',  // indigo
+    'rgba(244, 63, 94, 0.75)',   // rose
+  ];
+
+  const datasets = dnis.map((dni, index) => {
+    const emp = employeesDatabase[dni];
+    const dataCount = [];
+    const dataSeconds = [];
+    
+    sortedWeeks.forEach(w => {
+      const stats = weekMap[w][dni] || { count: 0, seconds: 0 };
+      dataCount.push(stats.count);
+      dataSeconds.push(stats.seconds);
+    });
+
+    const color = colorsList[index % colorsList.length];
+    
+    return {
+      label: emp.name,
+      data: dataCount,
+      tardinessSeconds: dataSeconds,
+      backgroundColor: color,
+      borderRadius: 4,
+      stack: 'tardinessStack'
+    };
+  }).filter(ds => ds.data.some(c => c > 0));
+
+  const isDark = document.body.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark' || !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  gerencialChartWeeklyTardiness = new Chart(ctx, {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: sortedWeeks.map(w => 'Sem ' + w),
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          color: '#ffffff',
+          font: { weight: 'bold', size: 10 },
+          formatter: function(value) {
+            return value > 0 ? value : '';
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const datasetLabel = context.dataset.label || '';
+              const count = context.raw;
+              const seconds = context.dataset.tardinessSeconds[context.dataIndex];
+              const hh = Math.floor(seconds / 3600);
+              const mm = Math.round((seconds % 3600) / 60);
+              const timeStr = `${hh}h ${mm}m`;
+              return ` ${datasetLabel}: ${count} tardanzas (${timeStr})`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: textColor, precision: 0 }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
+function renderGerencialRankingPuntualidad(dnis, perEmployee) {
+  const ctx = document.getElementById('chart-ranking-puntualidad');
+  if (!ctx) return;
+  if (gerencialChartRanking) { gerencialChartRanking.destroy(); gerencialChartRanking = null; }
+
+  const rows = dnis.map(dni => {
+    const emp = employeesDatabase[dni];
+    const asistidos = perEmployee[dni].attended.size;
+    const tardanzas = perEmployee[dni].late;
+    const pct = asistidos > 0 ? +(((asistidos - tardanzas) / asistidos) * 100).toFixed(1) : 0;
+    return { name: emp.name, pct };
+  }).sort((a,b) => b.pct - a.pct);
+
+  const isDark = document.body.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark' || !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  gerencialChartRanking = new Chart(ctx, {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: rows.map(r => r.name),
+      datasets: [{
+        label: '% Puntualidad',
+        data: rows.map(r => r.pct),
+        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return ` ${context.raw}%`;
+            }
+          }
+        },
+        datalabels: {
+          anchor: 'end',
+          align: 'end',
+          color: textColor,
+          font: { weight: 'bold', size: 11 },
+          formatter: function(value) {
+            return value + '%';
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { color: textColor, callback: v => v + '%' },
+          grid: { color: gridColor }
+        },
+        y: { ticks: { color: textColor, font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderGerencialRankingTardanzas(dnis, perEmployee) {
+  const ctx = document.getElementById('chart-ranking-tardanzas');
+  if (!ctx) return;
+  if (gerencialChartRankingTardanzas) { gerencialChartRankingTardanzas.destroy(); gerencialChartRankingTardanzas = null; }
+
+  const rows = dnis.map(dni => {
+    const emp = employeesDatabase[dni];
+    const tardSecs = perEmployee[dni].tardanzaSecs || 0;
+    const tardCount = perEmployee[dni].late || 0;
+    const hh = Math.floor(tardSecs / 3600);
+    const mm = Math.floor((tardSecs % 3600) / 60);
+    const ss = tardSecs % 60;
+    const timeLabel = `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    return { name: emp.name, tardSecs, tardCount, timeLabel };
+  }).sort((a,b) => b.tardSecs - a.tardSecs);
+
+  const isDark = document.body.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark' || !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  gerencialChartRankingTardanzas = new Chart(ctx, {
+    type: 'bar',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: rows.map(r => r.name),
+      datasets: [{
+        label: 'Tardanzas',
+        data: rows.map(r => r.tardSecs),
+        timeLabels: rows.map(r => r.timeLabel),
+        tardCounts: rows.map(r => r.tardCount),
+        backgroundColor: 'rgba(248, 113, 113, 0.8)',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          right: 55
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const tl = context.dataset.timeLabels[context.dataIndex];
+              const cnt = context.dataset.tardCounts[context.dataIndex];
+              return ` ${tl} (${cnt} tardanzas)`;
+            }
+          }
+        },
+        datalabels: {
+          anchor: 'end',
+          align: 'end',
+          color: textColor,
+          font: { weight: 'bold', size: 11 },
+          formatter: function(value, context) {
+            const label = context.dataset.timeLabels[context.dataIndex];
+            return value > 0 ? label : '';
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            color: textColor,
+            callback: function(value) {
+              const hh = Math.floor(value / 3600);
+              const mm = Math.floor((value % 3600) / 60);
+              return `${hh}:${String(mm).padStart(2,'0')}`;
+            }
+          },
+          grid: { color: gridColor }
+        },
+        y: { ticks: { color: textColor, font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderGerencialAlerts(dnis, perEmployee) {
+  // Removido a solicitud del usuario
+}
+
+function updateCloudStatus(status) {
+  const indicator = document.getElementById('cloud-status-indicator');
+  if (!indicator) return;
+  const dot = indicator.querySelector('.status-dot');
+  const txt = indicator.querySelector('.status-text');
+  if (!dot || !txt) return;
+
+  dot.style.animation = '';
+
+  if (status === 'syncing') {
+    indicator.style.background = 'rgba(234, 179, 8, 0.15)';
+    indicator.style.color = '#eab308';
+    indicator.style.borderColor = 'rgba(234, 179, 8, 0.25)';
+    dot.style.background = '#eab308';
+    dot.style.boxShadow = '0 0 6px #eab308';
+    dot.style.animation = 'pulse-active 1.5s infinite alternate';
+    txt.textContent = 'Sincronizando...';
+  } else if (status === 'connected') {
+    indicator.style.background = 'rgba(34, 197, 94, 0.15)';
+    indicator.style.color = '#22c55e';
+    indicator.style.borderColor = 'rgba(34, 197, 94, 0.25)';
+    dot.style.background = '#22c55e';
+    dot.style.boxShadow = '0 0 6px #22c55e';
+    txt.textContent = 'Conectado';
+  } else if (status === 'error') {
+    indicator.style.background = 'rgba(239, 68, 68, 0.15)';
+    indicator.style.color = '#ef4444';
+    indicator.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+    dot.style.background = '#ef4444';
+    dot.style.boxShadow = '0 0 6px #ef4444';
+    txt.textContent = 'Error de conexión';
   }
 }

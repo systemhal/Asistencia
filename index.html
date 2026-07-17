@@ -252,7 +252,14 @@
             </div>
             <div>
               <h2>Panel de Monitoreo General</h2>
-              <span class="badge badge-admin">Acceso Administrativo</span>
+              <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+                <span class="badge badge-admin">Acceso Administrativo</span>
+                <!-- Indicador de Estado de Conexión Nube -->
+                <div id="cloud-status-indicator" style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); transition: all 0.3s ease;">
+                  <span class="status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; box-shadow: 0 0 6px #22c55e; transition: all 0.3s ease;"></span>
+                  <span class="status-text">Conectado</span>
+                </div>
+              </div>
             </div>
           </div>
           <div style="display: flex; gap: 10px;">
@@ -288,6 +295,10 @@
           <button class="btn-admin-tab" data-tab="reports">
             <span class="material-symbols-rounded">analytics</span>
             <span>Reportes por Agente</span>
+          </button>
+          <button class="btn-admin-tab" data-tab="gerencial">
+            <span class="material-symbols-rounded">leaderboard</span>
+            <span>Vista Gerencial</span>
           </button>
           <button class="btn-admin-tab" data-tab="register">
             <span class="material-symbols-rounded">settings</span>
@@ -472,6 +483,154 @@
         </div> <!-- Fin de #tab-daily-content -->
 
         <!-- CONTENIDO PESTAÑA 2: REGISTRAR COLABORADOR Y CONFIGURACIÓN -->
+
+        <!-- CONTENIDO PESTAÑA: VISTA GERENCIAL -->
+        <div id="tab-gerencial-content" class="admin-tab-content hidden">
+          <div style="padding: 10px 0 20px 0;">
+
+            <!-- Filtros -->
+            <div class="gerencial-filters-bar card-inner" id="gerencial-filters-bar">
+              <div class="gerencial-filters-group">
+                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
+                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
+              </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label">Colaborador</label>
+                <select id="ger-select-employee" class="gerencial-select">
+                  <option value="all">Todos los colaboradores</option>
+                </select>
+              </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label">Tipo de Horario</label>
+                <select id="ger-select-schedule-type" class="gerencial-select">
+                  <option value="fixed" selected>Con Horario</option>
+                  <option value="flexible">Horario Flexible</option>
+                  <option value="all">Todos</option>
+                </select>
+              </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label">Agrupar por</label>
+                <select id="ger-select-grouping" class="gerencial-select">
+                  <option value="day" selected>Fecha</option>
+                  <option value="week">Semana</option>
+                  <option value="month">Mes</option>
+                </select>
+              </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label">Período</label>
+                <select id="ger-select-period" class="gerencial-select">
+                  <option value="this_week">Esta semana</option>
+                  <option value="last_week">Semana pasada</option>
+                  <option value="this_month" selected>Este mes</option>
+                  <option value="last_month">Mes pasado</option>
+                  <option value="custom">Rango personalizado</option>
+                </select>
+              </div>
+              <div class="gerencial-filters-group" id="ger-custom-range">
+                <label class="gerencial-filter-label">Desde</label>
+                <input type="date" id="ger-start-date" class="gerencial-input">
+                <label class="gerencial-filter-label">Hasta</label>
+                <input type="date" id="ger-end-date" class="gerencial-input">
+              </div>
+              <button id="btn-ger-refresh" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">refresh</span>
+                <span>Actualizar</span>
+              </button>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="gerencial-kpi-grid" id="gerencial-kpi-grid">
+              <div class="gerencial-kpi-card" id="kpi-asistencia">
+                <div class="kpi-icon-wrap kpi-green"><span class="material-symbols-rounded">how_to_reg</span></div>
+                <div class="kpi-data">
+                  <span class="kpi-value" id="kpi-val-asistencia">—</span>
+                  <span class="kpi-label">% Asistencia</span>
+                  <span class="kpi-sub" id="kpi-sub-asistencia">días presentes / días esperados</span>
+                </div>
+              </div>
+              <div class="gerencial-kpi-card" id="kpi-ausentismo">
+                <div class="kpi-icon-wrap kpi-red"><span class="material-symbols-rounded">person_off</span></div>
+                <div class="kpi-data">
+                  <span class="kpi-value" id="kpi-val-ausentismo">—</span>
+                  <span class="kpi-label">% Ausentismo</span>
+                  <span class="kpi-sub" id="kpi-sub-ausentismo">faltas / días esperados</span>
+                </div>
+              </div>
+              <div class="gerencial-kpi-card" id="kpi-puntualidad">
+                <div class="kpi-icon-wrap kpi-blue"><span class="material-symbols-rounded">schedule</span></div>
+                <div class="kpi-data">
+                  <span class="kpi-value" id="kpi-val-puntualidad">—</span>
+                  <span class="kpi-label">% Puntualidad</span>
+                  <span class="kpi-sub" id="kpi-sub-puntualidad">ingresos a tiempo / total ingresos</span>
+                </div>
+              </div>
+              <div class="gerencial-kpi-card" id="kpi-horas">
+                <div class="kpi-icon-wrap kpi-purple"><span class="material-symbols-rounded">timer</span></div>
+                <div class="kpi-data">
+                  <span class="kpi-value" id="kpi-val-horas">—</span>
+                  <span class="kpi-label">Horas Trabajadas</span>
+                  <span class="kpi-sub" id="kpi-sub-horas">total equipo en el período</span>
+                </div>
+              </div>
+              <div class="gerencial-kpi-card" id="kpi-tardanzas">
+                <div class="kpi-icon-wrap kpi-orange"><span class="material-symbols-rounded">running_with_errors</span></div>
+                <div class="kpi-data">
+                  <span class="kpi-value" id="kpi-val-tardanzas">—</span>
+                  <span class="kpi-label">Tardanzas</span>
+                  <span class="kpi-sub" id="kpi-sub-tardanzas">total en el período</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Gráficos -->
+            <div class="gerencial-charts-grid">
+              <div class="card-inner gerencial-chart-card">
+                <div class="gerencial-chart-title">
+                  <span class="material-symbols-rounded">trending_down</span>
+                  Evolutivo - % Ausentismo
+                </div>
+                <div style="position:relative; height: 280px;">
+                  <canvas id="chart-daily-ausentismo"></canvas>
+                </div>
+              </div>
+              <div class="card-inner gerencial-chart-card">
+                <div class="gerencial-chart-title">
+                  <span class="material-symbols-rounded">insights</span>
+                  Evolutivo - % Puntualidad
+                </div>
+                <div style="position:relative; height: 280px;">
+                  <canvas id="chart-daily-attendance"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rankings lado a lado -->
+            <div class="gerencial-charts-grid">
+              <!-- Ranking de Puntualidad -->
+              <div class="card-inner gerencial-chart-card">
+                <div class="gerencial-chart-title" style="margin-bottom: 14px;">
+                  <span class="material-symbols-rounded">emoji_events</span>
+                  Ranking de Puntualidad
+                </div>
+                <div style="position:relative; height: 350px;">
+                  <canvas id="chart-ranking-puntualidad"></canvas>
+                </div>
+              </div>
+              <!-- Ranking de Tardanzas -->
+              <div class="card-inner gerencial-chart-card">
+                <div class="gerencial-chart-title" style="margin-bottom: 14px;">
+                  <span class="material-symbols-rounded">running_with_errors</span>
+                  Ranking de Tardanzas
+                </div>
+                <div style="position:relative; height: 350px;">
+                  <canvas id="chart-ranking-tardanzas"></canvas>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
         <div id="tab-register-content" class="admin-tab-content hidden">
           <div class="card-inner" style="margin-bottom: 25px;">
             <div class="inner-header">
@@ -1590,5 +1749,7 @@
   <!-- Biblioteca SheetJS (XLSX) para exportación nativa a Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </body>
 </html>
