@@ -430,24 +430,25 @@
             </div>
 
             <!-- Filtros de fecha diario -->
-            <div class="daily-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-              <div class="input-group" style="margin-bottom: 0; width: 200px;">
-                <label for="daily-select-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Seleccionar Fecha</label>
-                <div class="input-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
-                  <input type="date" id="daily-select-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
-                </div>
+            <div class="gerencial-filters-bar card-inner no-print daily-filter-bar" id="daily-filter-bar">
+              <div class="gerencial-filters-group">
+                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
+                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
               </div>
-              <button id="btn-filter-daily" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">filter_list</span>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label" for="daily-select-date">Seleccionar Fecha</label>
+                <input type="date" id="daily-select-date" class="gerencial-input">
+              </div>
+              <button id="btn-filter-daily" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">filter_list</span>
                 <span>Procesar</span>
               </button>
-              <button id="btn-export-daily-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">download</span>
+              <button id="btn-export-daily-excel" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">download</span>
                 <span>Exportar Excel</span>
               </button>
-              <button id="btn-export-daily-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">print</span>
+              <button id="btn-export-daily-pdf" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
                 <span>Imprimir / PDF</span>
               </button>
             </div>
@@ -495,17 +496,17 @@
                 <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
               </div>
               <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label">Colaborador</label>
-                <select id="ger-select-employee" class="gerencial-select">
-                  <option value="all">Todos los colaboradores</option>
-                </select>
-              </div>
-              <div class="gerencial-filters-group">
                 <label class="gerencial-filter-label">Tipo de Horario</label>
                 <select id="ger-select-schedule-type" class="gerencial-select">
                   <option value="fixed" selected>Con Horario</option>
                   <option value="flexible">Horario Flexible</option>
                   <option value="all">Todos</option>
+                </select>
+              </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label">Colaborador</label>
+                <select id="ger-select-employee" class="gerencial-select">
+                  <option value="all">Todos los colaboradores</option>
                 </select>
               </div>
               <div class="gerencial-filters-group">
@@ -1146,40 +1147,33 @@
             </div>
 
             <!-- Filtros de fecha y colaborador -->
-            <div class="report-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-              <div class="input-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
-                <label for="select-report-employee" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Colaborador</label>
-                <div class="input-wrapper select-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">person</span>
-                  <select id="select-report-employee" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; cursor: pointer; -webkit-appearance: none;">
-                    <option value="" disabled selected hidden>Seleccionar colaborador...</option>
-                  </select>
-                </div>
+            <div class="gerencial-filters-bar card-inner no-print report-filter-bar" id="report-filter-bar">
+              <div class="gerencial-filters-group">
+                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
+                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
               </div>
-              <div class="input-group" style="margin-bottom: 0; width: 165px;">
-                <label for="report-start-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Desde</label>
-                <div class="input-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
-                  <input type="date" id="report-start-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
-                </div>
+              <div class="gerencial-filters-group" style="flex: 1; min-width: 200px;">
+                <label class="gerencial-filter-label" for="select-report-employee">Colaborador</label>
+                <select id="select-report-employee" class="gerencial-select" style="width: 100%;">
+                  <option value="" disabled selected hidden>Seleccionar colaborador...</option>
+                </select>
               </div>
-              <div class="input-group" style="margin-bottom: 0; width: 165px;">
-                <label for="report-end-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Hasta</label>
-                <div class="input-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
-                  <input type="date" id="report-end-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
-                </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label" for="report-start-date">Desde</label>
+                <input type="date" id="report-start-date" class="gerencial-input">
+                <label class="gerencial-filter-label" for="report-end-date">Hasta</label>
+                <input type="date" id="report-end-date" class="gerencial-input">
               </div>
-              <button id="btn-filter-report" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">filter_list</span>
+              <button id="btn-filter-report" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">filter_list</span>
                 <span>Filtrar</span>
               </button>
-              <button id="btn-export-agent-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">download</span>
+              <button id="btn-export-agent-excel" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">download</span>
                 <span>Exportar Excel</span>
               </button>
-              <button id="btn-export-agent-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">print</span>
+              <button id="btn-export-agent-pdf" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
                 <span>Imprimir / PDF</span>
               </button>
             </div>
@@ -1255,40 +1249,36 @@
             </div>
 
             <!-- Filtros de fecha consolidado -->
-            <div class="consolidated-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-              <div class="input-group" style="margin-bottom: 0; width: 165px;">
-                <label for="consolidated-start-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Desde</label>
-                <div class="input-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
-                  <input type="date" id="consolidated-start-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
-                </div>
+            <div class="gerencial-filters-bar card-inner no-print consolidated-filter-bar" id="consolidated-filter-bar">
+              <div class="gerencial-filters-group">
+                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
+                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
               </div>
-              <div class="input-group" style="margin-bottom: 0; width: 165px;">
-                <label for="consolidated-end-date" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Fecha Hasta</label>
-                <div class="input-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
-                  <input type="date" id="consolidated-end-date" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
-                </div>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label" for="consolidated-start-date">Desde</label>
+                <input type="date" id="consolidated-start-date" class="gerencial-input">
+                <label class="gerencial-filter-label" for="consolidated-end-date">Hasta</label>
+                <input type="date" id="consolidated-end-date" class="gerencial-input">
               </div>
-              <div class="quick-filters-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button type="button" id="btn-quick-week" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Esta Semana</button>
-                <button type="button" id="btn-quick-lastweek" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Semana Pasada</button>
-                <button type="button" id="btn-quick-month" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Este Mes</button>
-                <button type="button" id="btn-quick-30days" class="btn-outline" style="padding: 10px 12px; height: 42px; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 500;">Últimos 30 Días</button>
+              <div class="quick-filters-group" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button type="button" id="btn-quick-week" class="btn-outline" style="padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; height: auto;">Esta Semana</button>
+                <button type="button" id="btn-quick-lastweek" class="btn-outline" style="padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; height: auto;">Semana Pasada</button>
+                <button type="button" id="btn-quick-month" class="btn-outline" style="padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; height: auto;">Este Mes</button>
+                <button type="button" id="btn-quick-30days" class="btn-outline" style="padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; height: auto;">Últimos 30 Días</button>
               </div>
-              <button id="btn-filter-consolidated" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">filter_list</span>
+              <button id="btn-filter-consolidated" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">filter_list</span>
                 <span>Filtrar</span>
               </button>
-              <button id="btn-export-consolidated-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">download</span>
+              <button id="btn-export-consolidated-excel" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">download</span>
                 <span>Exportar Excel</span>
               </button>
-              <button id="btn-export-consolidated-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">print</span>
+              <button id="btn-export-consolidated-pdf" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
                 <span>Imprimir / PDF</span>
               </button>
-              <button id="btn-refresh-consolidated" class="btn-outline" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; height: 42px; border-radius: var(--radius-md); margin-left: auto;">
+              <button id="btn-refresh-consolidated" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem; margin-left: auto;">
                 <span class="material-symbols-rounded" style="font-size: 18px;">sync</span>
                 <span>Actualizar Datos</span>
               </button>
@@ -1346,24 +1336,25 @@
             </div>
 
             <!-- Filtros de mes -->
-            <div class="monthly-filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; align-items: flex-end; background: var(--surface-1); padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-              <div class="input-group" style="margin-bottom: 0; width: 200px;">
-                <label for="monthly-select-month" style="font-weight: 500; margin-bottom: 6px; display: block; font-size: 0.9rem; color: var(--text-secondary);">Seleccionar Mes</label>
-                <div class="input-wrapper" style="position: relative;">
-                  <span class="material-symbols-rounded input-icon" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;">calendar_today</span>
-                  <input type="month" id="monthly-select-month" style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px 10px 44px; color: var(--text-primary); font-family: var(--font-main); font-size: 0.95rem; outline: none; width: 100%; box-sizing: border-box;">
-                </div>
+            <div class="gerencial-filters-bar card-inner no-print monthly-filter-bar" id="monthly-filter-bar">
+              <div class="gerencial-filters-group">
+                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
+                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
               </div>
-              <button id="btn-filter-monthly" class="btn-primary" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">filter_list</span>
+              <div class="gerencial-filters-group">
+                <label class="gerencial-filter-label" for="monthly-select-month">Seleccionar Mes</label>
+                <input type="month" id="monthly-select-month" class="gerencial-input">
+              </div>
+              <button id="btn-filter-monthly" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">filter_list</span>
                 <span>Procesar</span>
               </button>
-              <button id="btn-export-monthly-excel" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">download</span>
+              <button id="btn-export-monthly-excel" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">download</span>
                 <span>Exportar Excel</span>
               </button>
-              <button id="btn-export-monthly-pdf" class="btn-outline" style="padding: 10px 16px; height: 42px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md);">
-                <span class="material-symbols-rounded">print</span>
+              <button id="btn-export-monthly-pdf" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
                 <span>Imprimir / PDF</span>
               </button>
             </div>
@@ -1702,8 +1693,8 @@
 
     <!-- MODAL HISTORIAL COMPLETO DE AGENTE (MENSUAL) (Paso 1) -->
     <div id="modal-agent-history" class="modal-overlay hidden">
-      <div class="modal card glassmorphism animate-scale-up" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: auto;">
-        <div class="card-header text-center" style="margin-bottom: 20px;">
+      <div class="modal card glassmorphism animate-scale-up" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: hidden; display: flex; flex-direction: column;">
+        <div class="card-header text-center" style="margin-bottom: 20px; flex-shrink: 0;">
           <span class="material-symbols-rounded icon-hero text-gradient color-blue">calendar_month</span>
           <h3>Mi Récord de Asistencia Mensual</h3>
           <p>Consulta tus asistencias, horas trabajadas y tardanzas del mes seleccionado</p>
@@ -1713,7 +1704,7 @@
           </div>
         </div>
         
-        <div class="table-responsive" style="margin-bottom: 20px;">
+        <div class="table-responsive" style="margin-bottom: 20px; overflow-y: auto; max-height: 50vh; min-height: 200px; flex-grow: 1;">
           <table class="admin-table">
             <thead>
               <tr>
@@ -1732,7 +1723,7 @@
           </table>
         </div>
         
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <div style="display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0;">
           <button type="button" id="btn-agent-history-close" class="btn-primary" style="padding: 10px 24px;">Cerrar</button>
         </div>
       </div>

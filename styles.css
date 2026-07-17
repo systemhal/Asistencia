@@ -1498,3 +1498,14 @@ input::-webkit-calendar-picker-indicator:hover {
 .ger-alert-icon { font-size: 22px; flex-shrink: 0; }
 .ger-alert-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
 .ger-alert-detail { font-size: 0.8rem; color: var(--text-muted); }
+
+/* Cabecera pegajosa con blur para la tabla de historial mensual del agente */
+#modal-agent-history .admin-table th {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background-color: var(--bg-card) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 2px 2px -1px rgba(0,0,0,0.15);
+}

@@ -390,6 +390,44 @@ btnLogout.addEventListener('click', () => {
    EMPLOYEE DASHBOARD INTERFACE CONTROLS
    ========================================================================== */
 
+function handleHistoryFetchResponse(res, fetchStartTime) {
+  if (!currentSession) return;
+  const dni = currentSession.dni;
+  if (res.status === "ok" && Array.isArray(res.data)) {
+    const localState = attendanceState[dni] || { action: 'Desconectado', timestamp: null, history: [] };
+    
+    // Conservar marcas locales que se registraron después de que inició la sincronización
+    const newLocalMarks = localState.history.filter(item => item.timestamp >= fetchStartTime);
+    
+    // Actualizar historial local combinando los registros de la nube y los nuevos locales sin guardar en la nube aún
+    attendanceState[dni].history = [...res.data, ...newLocalMarks];
+    
+    // Solo sobreescribir el estado y timestamp actual si la marca local no fue actualizada en el transcurso
+    if (!localState.timestamp || localState.timestamp < fetchStartTime) {
+      const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+      const normToday = normalizeDateStr(todayStr);
+      const todayMarks = res.data.filter(item => normalizeDateStr(item.dateStr) === normToday);
+      
+      if (todayMarks.length > 0) {
+        todayMarks.sort((a, b) => a.timestamp - b.timestamp);
+        const latestMark = todayMarks[todayMarks.length - 1];
+        attendanceState[dni].action = latestMark.action;
+        attendanceState[dni].timestamp = latestMark.timestamp;
+        updateDashboardStatusUI(latestMark.action);
+      } else {
+        attendanceState[dni].action = 'Desconectado';
+        attendanceState[dni].timestamp = null;
+        updateDashboardStatusUI('Desconectado');
+      }
+    }
+    
+    saveState();
+    renderPersonalLogs();
+    renderEmployeeWeeklySummary(dni);
+    updateAgentGuideAndSchedule();
+  }
+}
+
 function setupDashboardView() {
   if (!currentSession) return;
 
@@ -412,37 +450,43 @@ function setupDashboardView() {
 
   // Sincronizar el historial del empleado desde la nube para el resumen semanal y logs
   if (googleScriptUrl) {
+    // Deshabilitar botones temporalmente y mostrar estado de carga
+    btnIngreso.disabled = true;
+    btnBreakIn.disabled = true;
+    btnBreakOut.disabled = true;
+    btnSalida.disabled = true;
+    currentStatusText.textContent = "Sincronizando...";
+    currentStatusText.className = 'status-text status-break';
+    statusDot.className = 'status-dot pulse status-break';
+
+    const fetchStartTime = Date.now();
+    let resolved = false;
+
+    // Timeout de seguridad: 4 segundos
+    const syncTimeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        showToast('warning', 'Conexión lenta', 'Habilitando marcación local temporal.');
+        const localState = attendanceState[currentSession.dni];
+        updateDashboardStatusUI(localState ? localState.action : 'Desconectado');
+      }
+    }, 4000);
+
     fetch(`${googleScriptUrl}?action=get_history&dni=${currentSession.dni}`)
       .then(res => res.json())
       .then(res => {
-        if (res.status === "ok" && Array.isArray(res.data)) {
-          attendanceState[currentSession.dni].history = res.data;
-          
-          // Reconstruir el estado actual (action y timestamp) del empleado logueado para hoy
-          const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
-          const normToday = normalizeDateStr(todayStr);
-          const todayMarks = res.data.filter(item => normalizeDateStr(item.dateStr) === normToday);
-          
-          if (todayMarks.length > 0) {
-            todayMarks.sort((a, b) => a.timestamp - b.timestamp);
-            const latestMark = todayMarks[todayMarks.length - 1];
-            attendanceState[currentSession.dni].action = latestMark.action;
-            attendanceState[currentSession.dni].timestamp = latestMark.timestamp;
-            updateDashboardStatusUI(latestMark.action);
-          } else {
-            attendanceState[currentSession.dni].action = 'Desconectado';
-            attendanceState[currentSession.dni].timestamp = null;
-            updateDashboardStatusUI('Desconectado');
-          }
-          
-          saveState();
-          renderPersonalLogs();
-          renderEmployeeWeeklySummary(currentSession.dni);
-          updateAgentGuideAndSchedule();
-        }
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(syncTimeout);
+        handleHistoryFetchResponse(res, fetchStartTime);
       })
       .catch(err => {
         console.error("Error al sincronizar historial del empleado:", err);
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(syncTimeout);
+        const localState = attendanceState[currentSession.dni];
+        updateDashboardStatusUI(localState ? localState.action : 'Desconectado');
       });
   }
 
@@ -637,6 +681,27 @@ function registerAttendanceAction(action) {
   const dni = currentSession.dni;
   const name = currentSession.name;
   const now = new Date();
+
+  // PREVENCIÓN DE DOBLE MARCACIÓN
+  const empState = attendanceState[dni];
+  if (empState && Array.isArray(empState.history)) {
+    // 1. Evitar marcaciones de cualquier tipo en menos de 5 segundos
+    const lastAnyMark = empState.history[empState.history.length - 1];
+    if (lastAnyMark && (now.getTime() - lastAnyMark.timestamp) < 5000) {
+      showToast('warning', 'Espera un momento', 'Procesando tu marcación anterior. Por favor espera.');
+      return;
+    }
+
+    // 2. Evitar marcaciones de la misma acción en menos de 60 segundos
+    const lastMarkOfSameAction = empState.history.find(item => 
+      item.action === action && 
+      (now.getTime() - item.timestamp) < 60000
+    );
+    if (lastMarkOfSameAction) {
+      showToast('warning', 'Marcación duplicada bloqueada 🛑', `Ya registraste tu ${action} hace menos de un minuto.`);
+      return;
+    }
+  }
   
   const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const dateStr = now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
@@ -915,34 +980,12 @@ function startAutoSync(mode) {
     isSyncing = true;
 
     if (mode === 'agent' && currentSession) {
+      const fetchStartTime = Date.now();
       // MODO AGENTE: solo trae el historial del agente logueado (liviano)
       fetch(`${googleScriptUrl}?action=get_history&dni=${currentSession.dni}`)
         .then(res => res.json())
         .then(res => {
-          if (res.status === "ok" && Array.isArray(res.data)) {
-            attendanceState[currentSession.dni].history = res.data;
-
-            const todayStr = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
-            const normToday = normalizeDateStr(todayStr);
-            const todayMarks = res.data.filter(item => normalizeDateStr(item.dateStr) === normToday);
-
-            if (todayMarks.length > 0) {
-              todayMarks.sort((a, b) => a.timestamp - b.timestamp);
-              const latestMark = todayMarks[todayMarks.length - 1];
-              attendanceState[currentSession.dni].action = latestMark.action;
-              attendanceState[currentSession.dni].timestamp = latestMark.timestamp;
-              updateDashboardStatusUI(latestMark.action);
-            } else {
-              attendanceState[currentSession.dni].action = 'Desconectado';
-              attendanceState[currentSession.dni].timestamp = null;
-              updateDashboardStatusUI('Desconectado');
-            }
-
-            saveState();
-            renderPersonalLogs();
-            renderEmployeeWeeklySummary(currentSession.dni);
-            updateAgentGuideAndSchedule();
-          }
+          handleHistoryFetchResponse(res, fetchStartTime);
         })
         .catch(() => {})
         .finally(() => { isSyncing = false; });
@@ -1716,7 +1759,7 @@ function setupEventListeners() {
 // Post attendance payload to Google Apps Script Web App
 function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, silent = false) {
   if (!silent) {
-    showToast('warning', 'Sincronizando...', 'Enviando marca de asistencia a Google Sheets.');
+    showToast('warning', 'Sincronizando...', 'Registrando marca de asistencia...');
   }
   
   const payload = {
@@ -1745,13 +1788,13 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, s
   })
   .then(() => {
     if (!silent) {
-      showToast('success', 'Sincronización Exitosa', `Se registró '${action}' en tu Google Sheet.`);
+      showToast('success', 'Sincronización Exitosa', `Se registró '${action}' correctamente.`);
     }
   })
   .catch(err => {
     console.error('Error post sheet:', err);
     if (!silent) {
-      showToast('error', 'Error de Conexión', 'No se pudo escribir en el Sheet. Se guardó localmente.');
+      showToast('error', 'Error de Conexión', 'Se guardó localmente de manera segura.');
     }
   });
 }
@@ -3198,14 +3241,14 @@ function renderReportTable(history, employee) {
   thead.innerHTML = `
     <tr>
       <th>Fecha</th>
-      <th>Entrada</th>
-      <th>Tardanza</th>
-      <th>Refrigerio (Inicio &rarr; Fin)</th>
-      <th>Salida</th>
-      <th>Horas Adicionales</th>
-      <th>Refrigerio (Total)</th>
-      <th>Trabajo Real</th>
-      <th>Diferencia</th>
+      <th class="text-center">Entrada</th>
+      <th class="text-center">Tardanza</th>
+      <th class="text-center">Refrigerio (Inicio &rarr; Fin)</th>
+      <th class="text-center">Salida</th>
+      <th class="text-center">Horas Adicionales</th>
+      <th class="text-center">Refrigerio (Total)</th>
+      <th class="text-center">Trabajo Real</th>
+      <th class="text-center">Diferencia</th>
     </tr>
   `;
 
@@ -3326,7 +3369,7 @@ function renderReportTable(history, employee) {
       summaryTr.style.cursor = 'pointer';
       
       summaryTr.innerHTML = `
-        <td style="color: var(--text-primary); text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 6px; border-bottom: none;">
+        <td style="color: var(--text-primary); text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 6px; border-bottom: none; font-size: 0.8rem; line-height: 1.2;">
           <span class="material-symbols-rounded toggle-icon" style="font-size: 18px; transition: transform 0.2s; color: var(--text-secondary);">chevron_right</span>
           <span>${emp.name}</span>
         </td>
@@ -3408,7 +3451,7 @@ function renderReportTable(history, employee) {
     const scheduledBreakStr = `${employee.breakStart || "13:00"} - ${employee.breakEnd || "14:00"}`;
     const summaryRowHtml = `
       <tr class="summary-row expanded-group" data-emp-dni="${employee.dni}" style="background-color: var(--bg-secondary) !important; font-weight: 700; cursor: pointer;">
-        <td style="color: var(--text-primary); text-transform: uppercase; display: flex; align-items: center; gap: 6px; border-bottom: none; font-weight: 700;">
+        <td style="color: var(--text-primary); text-transform: uppercase; display: flex; align-items: center; gap: 6px; border-bottom: none; font-weight: 700; font-size: 0.8rem; line-height: 1.2;">
           <span class="material-symbols-rounded toggle-icon" style="font-size: 18px; transition: transform 0.2s; color: var(--text-secondary); transform: rotate(90deg);">chevron_right</span>
           <span>${employee.name}</span>
         </td>
