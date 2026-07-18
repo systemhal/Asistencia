@@ -257,6 +257,7 @@ function loadLocalStorage() {
   }
   autoClosePendingSessions();
   loadSecuritySettings();
+  validateDeviceSecurity();
 }
 
 function saveState() {
@@ -1039,8 +1040,29 @@ function syncInitialData() {
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && res.data) {
-        const { employees, justificaciones, feriados, history } = res.data;
+        const { employees, justificaciones, feriados, history, config } = res.data;
         
+        // 0. Cargar y aplicar configuración global de seguridad
+        if (config) {
+          if (typeof config.security_block_mobile === 'boolean') {
+            securityBlockMobile = config.security_block_mobile;
+            safeSetItem('security_block_mobile', securityBlockMobile);
+          }
+          if (typeof config.security_restrict_pcs === 'boolean') {
+            securityRestrictPcs = config.security_restrict_pcs;
+            safeSetItem('security_restrict_pcs', securityRestrictPcs);
+          }
+          if (typeof config.tardiness_tolerance === 'number' && config.tardiness_tolerance >= 0) {
+            tardinessTolerance = config.tardiness_tolerance;
+            safeSetItem('tardiness_tolerance', tardinessTolerance);
+          }
+          const chkMobile = document.getElementById('chk-block-mobile');
+          const chkPcs = document.getElementById('chk-restrict-pcs');
+          if (chkMobile) chkMobile.checked = securityBlockMobile;
+          if (chkPcs) chkPcs.checked = securityRestrictPcs;
+          validateDeviceSecurity();
+        }
+
         // 1. Cargar colaboradores
         if (Array.isArray(employees)) {
           employeesDatabase = {};
@@ -1387,6 +1409,21 @@ function setupEventListeners() {
       }
     }
     validateDeviceSecurity();
+
+    // Sincronizar configuración global a Google Sheets si hay URL configurada
+    if (googleScriptUrl) {
+      fetch(googleScriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'Guardar_Configuracion',
+          security_block_mobile: securityBlockMobile,
+          security_restrict_pcs: securityRestrictPcs,
+          tardiness_tolerance: tardinessTolerance
+        })
+      }).catch(err => console.error('Error sincronizando configuración global:', err));
+    }
 
     showToast('success', 'Configuración guardada ✅', `${urlMessage} Tolerancia de tardanza establecida en ${tardinessTolerance} minutos.`);
     
@@ -6495,13 +6532,18 @@ let securityBlockMobile = false;
 let securityRestrictPcs = false;
 
 function isMobileDevice() {
-  // Detección multi-capa: user agent + ancho de pantalla + puntos táctiles
-  const uaMatch = /mobile|android|iphone|ipad|ipod|tablet|blackberry|windows phone|opera mini|silk/i.test(navigator.userAgent);
-  const smallScreen = window.screen.width <= 768;
-  const touchDevice = navigator.maxTouchPoints > 1;
-  // Un dispositivo móvil cumple al menos 2 de 3 criterios
-  const signals = [uaMatch, smallScreen, touchDevice].filter(Boolean).length;
-  return signals >= 2;
+  const ua = (navigator.userAgent || navigator.vendor || window.opera || '').toLowerCase();
+  
+  // 1. Detección por User-Agent de celulares y tablets
+  const isMobileUA = /mobile|android|iphone|ipad|ipod|tablet|blackberry|windows phone|opera mini|silk|kindle/i.test(ua);
+  if (isMobileUA) return true;
+
+  // 2. Detección por pantalla táctil + ancho de viewport pequeño o mediano
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const isSmallViewport = (window.innerWidth <= 900) || (window.screen.width <= 900);
+  if (isTouch && isSmallViewport) return true;
+
+  return false;
 }
 
 function lockBodyForSecurity(lock) {
@@ -6519,8 +6561,75 @@ function loadSecuritySettings() {
   
   const chkMobile = document.getElementById('chk-block-mobile');
   const chkPcs = document.getElementById('chk-restrict-pcs');
-  if (chkMobile) chkMobile.checked = securityBlockMobile;
-  if (chkPcs) chkPcs.checked = securityRestrictPcs;
+  if (chkMobile) {
+    chkMobile.checked = securityBlockMobile;
+    if (!chkMobile.dataset.bound) {
+      chkMobile.dataset.bound = "true";
+      chkMobile.addEventListener('change', () => {
+        securityBlockMobile = chkMobile.checked;
+        safeSetItem('security_block_mobile', securityBlockMobile);
+        
+        if (googleScriptUrl) {
+          fetch(googleScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'Guardar_Configuracion',
+              security_block_mobile: securityBlockMobile,
+              security_restrict_pcs: securityRestrictPcs,
+              tardiness_tolerance: tardinessTolerance
+            })
+          }).catch(err => console.error('Error sincronizando bloqueo móvil:', err));
+        }
+
+        showToast(
+          securityBlockMobile ? 'warning' : 'info',
+          securityBlockMobile ? 'Bloqueo Móvil Activado 🔒' : 'Bloqueo Móvil Desactivado 🔓',
+          securityBlockMobile ? 'El acceso desde celulares y tablets ha sido bloqueado en la nube.' : 'Los celulares y tablets ya pueden acceder al sistema.'
+        );
+
+        validateDeviceSecurity();
+      });
+    }
+  }
+
+  if (chkPcs) {
+    chkPcs.checked = securityRestrictPcs;
+    if (!chkPcs.dataset.bound) {
+      chkPcs.dataset.bound = "true";
+      chkPcs.addEventListener('change', () => {
+        securityRestrictPcs = chkPcs.checked;
+        safeSetItem('security_restrict_pcs', securityRestrictPcs);
+        if (securityRestrictPcs) {
+          const expectedToken = ADMIN_PASSWORD_HASH;
+          safeSetItem('asistencia_pc_auth_token', expectedToken);
+        }
+
+        if (googleScriptUrl) {
+          fetch(googleScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'Guardar_Configuracion',
+              security_block_mobile: securityBlockMobile,
+              security_restrict_pcs: securityRestrictPcs,
+              tardiness_tolerance: tardinessTolerance
+            })
+          }).catch(err => console.error('Error sincronizando restricción de PCs:', err));
+        }
+
+        showToast(
+          securityRestrictPcs ? 'warning' : 'info',
+          securityRestrictPcs ? 'Restricción de PCs Activada 🔒' : 'Restricción de PCs Desactivada 🔓',
+          securityRestrictPcs ? 'Solo las computadoras autorizadas podrán marcar asistencia.' : 'Cualquier computadora puede marcar asistencia.'
+        );
+
+        validateDeviceSecurity();
+      });
+    }
+  }
 }
 
 function validateDeviceSecurity() {

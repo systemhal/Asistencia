@@ -110,13 +110,19 @@ function doGet(e) {
     
     // 1. Obtener base de datos unificada (Acción optimizada principal)
     if (action === 'get_initial_data') {
+      var props = PropertiesService.getScriptProperties();
       return getJsonResponse({
         status: "ok",
         data: {
           employees: getEmployeesData(ss),
           justificaciones: getJustificacionesData(ss),
           feriados: getFeriadosData(ss),
-          history: getHistoryData(ss)
+          history: getHistoryData(ss),
+          config: {
+            security_block_mobile: props.getProperty('security_block_mobile') === 'true',
+            security_restrict_pcs: props.getProperty('security_restrict_pcs') === 'true',
+            tardiness_tolerance: props.getProperty('tardiness_tolerance') ? parseInt(props.getProperty('tardiness_tolerance'), 10) : 5
+          }
         }
       });
     }
@@ -162,6 +168,21 @@ function doPost(e) {
     }
     
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // 0. Guardar Configuración Global de Seguridad
+    if (action === "Guardar_Configuracion") {
+      var props = PropertiesService.getScriptProperties();
+      if (postData.security_block_mobile !== undefined) {
+        props.setProperty('security_block_mobile', String(postData.security_block_mobile === true || postData.security_block_mobile === 'true'));
+      }
+      if (postData.security_restrict_pcs !== undefined) {
+        props.setProperty('security_restrict_pcs', String(postData.security_restrict_pcs === true || postData.security_restrict_pcs === 'true'));
+      }
+      if (postData.tardiness_tolerance !== undefined) {
+        props.setProperty('tardiness_tolerance', String(postData.tardiness_tolerance));
+      }
+      return getJsonResponse({ status: "ok", message: "Configuración global de seguridad guardada." });
+    }
     
     // 1. Registrar Nuevo Colaborador
     if (action === "Registrar_Personal") {
