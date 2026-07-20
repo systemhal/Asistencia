@@ -4,16 +4,7 @@
 
 // 1. Base de Datos Inicial (Datos por defecto si el LocalStorage está vacío)
 const DEFAULT_EMPLOYEES = {
-  //"73507283": { name: "ESPINOZA DE LA CRUZ NORIA LOZANIA", role: "Operaciones", age: 30, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"73570425": { name: "BELTRAN ANAYA GUIERAL GERARDO", role: "Soporte Técnico", age: 25, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"70643869": { name: "RIOJAS OCHANTE JESUS LEONARDO", role: "Logística", age: 28, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"70920196": { name: "JADE ELISA VEGA VEGA", role: "Administración", age: 24, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"73828099": { name: "CESAR AUGUSTO DE LA CRUZ SOLANO", role: "Operaciones", age: 33, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"76209425": { name: "SUNI MONROY AMPARO SOLEDAD", role: "Atención al Cliente", age: 29, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"74835571": { name: "GONZALEZ RIVERA JUAN CARLOS", role: "Operaciones", age: 31, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"70625678": { name: "RAMIREZ DIAZ CARMEN JULIA", role: "Logística", age: 35, gender: "Femenino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"76241100": { name: "HUAMAN PALOMINO JOSE LUIS", role: "Soporte Técnico", age: 27, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" },
-  //"76458278": { name: "HURTADO TORRES GHILBERT ROBERTO", role: "Soporte Técnico", age: 32, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" }
+   //"76458278": { name: "HURTADO TORRES GHILBERT ROBERTO", role: "Soporte Técnico", age: 32, gender: "Masculino", pin: "1234", workStart: "08:00", workEnd: "17:00", breakStart: "13:00", breakEnd: "14:00" }
 };
 
 // Variable global dinámica que reemplaza a MOCK_EMPLOYEES
@@ -150,26 +141,28 @@ document.addEventListener('DOMContentLoaded', () => {
    ========================================================================== */
 
 function initThemeToggle() {
-  const btn = document.getElementById('btn-theme-toggle');
-  const icon = document.getElementById('theme-icon');
-
+  const buttons = document.querySelectorAll('.btn-theme-toggle');
+  
   // Load saved preference, default = dark
   const saved = localStorage.getItem('app_theme') || 'dark';
-  applyTheme(saved, icon);
+  applyTheme(saved);
 
-  btn.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
-    applyTheme(next, icon);
-    safeSetItem('app_theme', next);
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      safeSetItem('app_theme', next);
+    });
   });
 }
 
-function applyTheme(theme, iconEl) {
+function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  if (iconEl) {
+  const icons = document.querySelectorAll('.theme-icon');
+  icons.forEach(iconEl => {
     iconEl.textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
-  }
+  });
 }
 
 // Load state from LocalStorage to keep simulation persistent
@@ -2116,6 +2109,72 @@ function showView(viewId) {
 }
 
 /* ==========================================================================
+   ADMIN TABS SWITCHER ENGINE
+   ========================================================================== */
+
+function setupAdminTabs() {
+  const tabButtons = document.querySelectorAll('.btn-admin-tab');
+  const tabContents = document.querySelectorAll('.admin-tab-content');
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetTab = btn.getAttribute('data-tab');
+      if (!targetTab) return;
+
+      // Desactivar todos los botones y pestañas
+      tabButtons.forEach(b => b.classList.remove('active'));
+      tabContents.forEach(c => {
+        c.classList.remove('active');
+        c.classList.add('hidden');
+      });
+
+      // Activar el botón presionado
+      btn.classList.add('active');
+
+      // Activar el contenido de la pestaña correspondiente
+      const activeContent = document.getElementById(`tab-${targetTab}-content`);
+      if (activeContent) {
+        activeContent.classList.remove('hidden');
+        activeContent.classList.add('active');
+      }
+
+      // Actualizar el título principal de la barra superior dinámicamente
+      const pageTitleEl = document.querySelector('.admin-page-title');
+      if (pageTitleEl) {
+        const titleMap = {
+          'live': 'Panel de Monitoreo General',
+          'daily': 'Resumen Diario de Asistencia',
+          'consolidated': 'Resumen General Consolidado',
+          'monthly': 'Resumen y Récord Mensual',
+          'reports': 'Reportes Detallados por Agente',
+          'gerencial': 'Vista y Métricas Gerenciales',
+          'register': 'Gestión de Personal y Configuración'
+        };
+        pageTitleEl.textContent = titleMap[targetTab] || 'Panel de Administración';
+      }
+
+      // Ejecutar renderizado específico de la pestaña seleccionada
+      if (targetTab === 'daily') {
+        if (typeof renderDailySummaryTable === 'function') renderDailySummaryTable();
+      } else if (targetTab === 'consolidated') {
+        if (typeof loadConsolidatedReport === 'function') loadConsolidatedReport();
+      } else if (targetTab === 'monthly') {
+        if (typeof renderMonthlyReport === 'function') renderMonthlyReport();
+      } else if (targetTab === 'reports') {
+        const select = document.getElementById('select-report-employee');
+        if (select && select.value && typeof renderAgentReport === 'function') renderAgentReport(select.value);
+      } else if (targetTab === 'gerencial') {
+        if (typeof renderGerencialView === 'function') renderGerencialView();
+      } else if (targetTab === 'register') {
+        if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
+        if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
+        if (typeof renderJustificacionesTable === 'function') renderJustificacionesTable();
+      }
+    });
+  });
+}
+
+/* ==========================================================================
    TOAST NOTIFICATION ENGINE
    ========================================================================== */
 
@@ -3580,6 +3639,23 @@ function fetchAllHistoryLocal() {
   return Promise.resolve(history);
 }
 
+let consolidatedSortCol = 'name';
+let consolidatedSortDir = 'asc';
+
+function getSortIconHTML(colKey) {
+  const isActive = (consolidatedSortCol === colKey);
+  const iconName = isActive 
+    ? (consolidatedSortDir === 'desc' ? 'arrow_downward' : 'arrow_upward') 
+    : 'unfold_more';
+  
+  const bgStyle = isActive ? 'background: #3b82f6; color: #ffffff;' : 'background: rgba(255, 255, 255, 0.2); color: #cbd5e1;';
+  const iconOpacity = isActive ? 'opacity: 1;' : 'opacity: 0.7;';
+
+  return `<span class="sort-icon-badge" style="display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; ${bgStyle} margin-left: 5px; vertical-align: middle; transition: all 0.2s ease;">
+    <span class="material-symbols-rounded" style="font-size: 12px; ${iconOpacity}">${iconName}</span>
+  </span>`;
+}
+
 function renderConsolidatedTable(history) {
   const thead = document.getElementById('admin-consolidated-thead');
   const tbody = document.getElementById('admin-consolidated-table-body');
@@ -3642,26 +3718,56 @@ function renderConsolidatedTable(history) {
     dataMap[item.dni][item.dateStr].push(item);
   });
 
-  // 5. Dibujar cabecera dinámica
+  // 5. Dibujar cabecera dinámica con ordenamiento interactivo
   let headerHtml = `
     <tr>
-      <th style="min-width: 200px;">Colaborador</th>
-      <th style="min-width: 100px;">DNI</th>
+      <th class="sortable-th" data-col="name" style="min-width: 200px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por nombre de colaborador">
+        <span>Colaborador</span>${getSortIconHTML('name')}
+      </th>
+      <th class="sortable-th" data-col="dni" style="min-width: 100px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por DNI">
+        <span>DNI</span>${getSortIconHTML('dni')}
+      </th>
   `;
   sortedDates.forEach(dateStr => {
-    headerHtml += `<th class="text-center" style="min-width: 110px;">${dateStr}</th>`;
+    headerHtml += `
+      <th class="sortable-th text-center" data-col="date:${dateStr}" style="min-width: 110px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por horas trabajadas en esta fecha">
+        <span>${dateStr}</span>${getSortIconHTML('date:' + dateStr)}
+      </th>`;
   });
   headerHtml += `
-      <th class="text-center cell-total-worked" style="min-width: 120px;">Total Horas</th>
-      <th class="text-center cell-total-tardy" style="min-width: 100px;">Tardanzas</th>
-      <th class="text-center cell-total-tardy-seconds" style="min-width: 120px;">Total Hrs. Tardanzas</th>
-      <th class="text-center cell-total-absent" style="min-width: 100px;">Faltas</th>
+      <th class="sortable-th text-center cell-total-worked" data-col="totalWorked" style="min-width: 120px; cursor: pointer; user-select: none;" title="Haz clic para ordenar de Mayor a Menor por Total Horas">
+        <span>Total Horas</span>${getSortIconHTML('totalWorked')}
+      </th>
+      <th class="sortable-th text-center cell-total-tardy" data-col="totalTardyCount" style="min-width: 100px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por cantidad de tardanzas">
+        <span>Tardanzas</span>${getSortIconHTML('totalTardyCount')}
+      </th>
+      <th class="sortable-th text-center cell-total-tardy-seconds" data-col="totalTardySecs" style="min-width: 125px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por tiempo total de tardanzas">
+        <span>Total Hrs. Tardanzas</span>${getSortIconHTML('totalTardySecs')}
+      </th>
+      <th class="sortable-th text-center cell-total-absent" data-col="totalAbsentCount" style="min-width: 100px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por cantidad de faltas">
+        <span>Faltas</span>${getSortIconHTML('totalAbsentCount')}
+      </th>
     </tr>
   `;
   thead.innerHTML = headerHtml;
 
-  // 6. Dibujar cuerpo
-  tbody.innerHTML = '';
+  // Escuchadores de evento en las cabeceras para cambiar ordenamiento
+  thead.querySelectorAll('.sortable-th').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.getAttribute('data-col');
+      if (!col) return;
+      if (consolidatedSortCol === col) {
+        consolidatedSortDir = consolidatedSortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        consolidatedSortCol = col;
+        // Si se hace clic en métricas (horas, tardanzas, faltas), ordenar por defecto de Mayor a Menor (desc)
+        consolidatedSortDir = (col === 'name' || col === 'dni') ? 'asc' : 'desc';
+      }
+      renderConsolidatedTable(cachedConsolidatedHistory || history);
+    });
+  });
+
+  // 6. Preparar y calcular datos por colaborador
   const dnis = Object.keys(employeesDatabase);
   
   if (dnis.length === 0) {
@@ -3669,33 +3775,24 @@ function renderConsolidatedTable(history) {
     return;
   }
 
-  dnis.forEach(dni => {
+  const rowDataList = dnis.map(dni => {
     const employee = employeesDatabase[dni];
-    const tr = document.createElement('tr');
-    
-    let rowHtml = `
-      <td class="table-employee-name" style="width: 220px; min-width: 220px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">${employee.name}</td>
-      <td style="width: 100px; min-width: 100px; max-width: 100px;">${dni}</td>
-    `;
-    
     let totalWorkedSeconds = 0;
     let totalTardinessCount = 0;
     let totalTardinessSeconds = 0;
     let totalAbsentCount = 0;
+    const dateValuesMap = {};
+    const dateCellsMap = {};
 
     sortedDates.forEach(dateStr => {
       const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
 
-      // Calcular estados/incidencias
       let isHoliday = false;
       const dateParts = dateStr.split('/');
       if (dateParts.length >= 2) {
         const dStr = String(parseInt(dateParts[0], 10)).padStart(2, '0');
         const mStr = String(parseInt(dateParts[1], 10)).padStart(2, '0');
         const dayMonth = `${dStr}/${mStr}`;
-        const FERIADOS = [
-          "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
-        ];
         isHoliday = GLOBAL_FERIADOS.includes(dayMonth);
         const customHoliday = feriadosDatabase.find(f => normalizeDateStr(f.dateStr) === normalizeDateStr(dateStr));
         if (customHoliday) isHoliday = true;
@@ -3746,14 +3843,13 @@ function renderConsolidatedTable(history) {
         
         const inMark = dayMarks.find(m => m.action === 'Ingreso');
         const outMark = dayMarks.find(m => m.action === 'Salida');
-        
         const entTime = inMark ? inMark.timeStr : '---';
         const salTime = outMark ? outMark.timeStr : '---';
         
         totalWorkedSeconds += report.workedSeconds;
+        dateValuesMap[dateStr] = report.workedSeconds;
         
         let tooltip = `Fecha: ${dateStr}\nEntrada: ${entTime} ${inMark && inMark.device ? '('+inMark.device+')' : ''}\nSalida: ${salTime} ${outMark && outMark.device ? '('+outMark.device+')' : ''}\nTrabajo Real: ${formatSecondsToHHMMSS(report.workedSeconds)}`;
-        
         let cellText = formatSecondsToHHMMSS(report.workedSeconds);
         let cellClass = 'cell-assisted';
         
@@ -3765,8 +3861,9 @@ function renderConsolidatedTable(history) {
           cellClass = 'cell-tardiness';
         }
         
-        rowHtml += `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
+        dateCellsMap[dateStr] = `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
       } else {
+        dateValuesMap[dateStr] = 0;
         let cellClass = 'cell-absent';
         let cellText = 'Falta';
         let tooltip = `Fecha: ${dateStr}`;
@@ -3788,15 +3885,75 @@ function renderConsolidatedTable(history) {
           tooltip += `\nFalta / Inasistencia`;
         }
         
-        rowHtml += `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
+        dateCellsMap[dateStr] = `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
       }
     });
 
+    return {
+      dni,
+      name: employee.name,
+      totalWorkedSeconds,
+      totalTardinessCount,
+      totalTardinessSeconds,
+      totalAbsentCount,
+      dateValuesMap,
+      dateCellsMap
+    };
+  });
+
+  // 7. Ordenar los datos según la columna y dirección activa
+  rowDataList.sort((a, b) => {
+    let valA, valB;
+    if (consolidatedSortCol === 'name') {
+      valA = a.name.toLowerCase();
+      valB = b.name.toLowerCase();
+    } else if (consolidatedSortCol === 'dni') {
+      valA = a.dni;
+      valB = b.dni;
+    } else if (consolidatedSortCol === 'totalWorked') {
+      valA = a.totalWorkedSeconds;
+      valB = b.totalWorkedSeconds;
+    } else if (consolidatedSortCol === 'totalTardyCount') {
+      valA = a.totalTardinessCount;
+      valB = b.totalTardinessCount;
+    } else if (consolidatedSortCol === 'totalTardySecs') {
+      valA = a.totalTardinessSeconds;
+      valB = b.totalTardinessSeconds;
+    } else if (consolidatedSortCol === 'totalAbsentCount') {
+      valA = a.totalAbsentCount;
+      valB = b.totalAbsentCount;
+    } else if (consolidatedSortCol.startsWith('date:')) {
+      const dStr = consolidatedSortCol.replace('date:', '');
+      valA = a.dateValuesMap[dStr] || 0;
+      valB = b.dateValuesMap[dStr] || 0;
+    } else {
+      valA = a.name.toLowerCase();
+      valB = b.name.toLowerCase();
+    }
+
+    if (valA < valB) return consolidatedSortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return consolidatedSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // 8. Dibujar filas ordenadas en el cuerpo de la tabla
+  tbody.innerHTML = '';
+  rowDataList.forEach(row => {
+    const tr = document.createElement('tr');
+    let rowHtml = `
+      <td class="table-employee-name" style="width: 220px; min-width: 220px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">${row.name}</td>
+      <td style="width: 100px; min-width: 100px; max-width: 100px;">${row.dni}</td>
+    `;
+    
+    sortedDates.forEach(dateStr => {
+      rowHtml += row.dateCellsMap[dateStr];
+    });
+
     rowHtml += `
-      <td class="cell-total-worked">${formatSecondsToHHMMSS(totalWorkedSeconds)}</td>
-      <td class="cell-total-tardy">${totalTardinessCount} tard.</td>
-      <td class="cell-total-tardy-seconds">${formatSecondsToHHMMSS(totalTardinessSeconds)}</td>
-      <td class="cell-total-absent">${totalAbsentCount} faltas</td>
+      <td class="cell-total-worked">${formatSecondsToHHMMSS(row.totalWorkedSeconds)}</td>
+      <td class="cell-total-tardy">${row.totalTardinessCount} tard.</td>
+      <td class="cell-total-tardy-seconds">${formatSecondsToHHMMSS(row.totalTardinessSeconds)}</td>
+      <td class="cell-total-absent">${row.totalAbsentCount} faltas</td>
     `;
     
     tr.innerHTML = rowHtml;
@@ -3979,6 +4136,76 @@ function setupAdminTabs() {
       showToast('info', 'Actualizando...', 'Sincronizando colaboradores y reporte consolidado.');
     });
   }
+
+  // --- Lógica e interactividad de botones de exportación a PDF (Imprimir) ---
+  const setupPDFExportListeners = () => {
+    // 1. Reportes por Agente
+    const btnExportAgentPDF = document.getElementById('btn-export-agent-pdf');
+    if (btnExportAgentPDF) {
+      btnExportAgentPDF.addEventListener('click', () => {
+        const select = document.getElementById('select-report-employee');
+        if (select && select.value && select.value !== 'all' && employeesDatabase[select.value]) {
+          const emp = employeesDatabase[select.value];
+          const empTitleName = document.getElementById('report-employee-name-display');
+          if (empTitleName) empTitleName.textContent = `${emp.name} (DNI: ${select.value})`;
+          const pName = document.getElementById('print-emp-name');
+          const pDni = document.getElementById('print-emp-dni');
+          const pRole = document.getElementById('print-emp-role');
+          if (pName) pName.textContent = emp.name;
+          if (pDni) pDni.textContent = select.value;
+          if (pRole) pRole.textContent = emp.role || 'Colaborador';
+          
+          const start = document.getElementById('report-start-date')?.value || 'Inicio';
+          const end = document.getElementById('report-end-date')?.value || 'Fin';
+          const pRange = document.getElementById('print-report-range');
+          if (pRange) pRange.textContent = `${start} al ${end}`;
+        }
+        window.print();
+      });
+    }
+
+    // 2. Resumen Consolidado / General
+    const btnExportConsolidatedPDF = document.getElementById('btn-export-consolidated-pdf');
+    if (btnExportConsolidatedPDF) {
+      btnExportConsolidatedPDF.addEventListener('click', () => {
+        const printRange = document.getElementById('print-consolidated-range');
+        if (printRange) {
+          const start = document.getElementById('consolidated-start-date')?.value || 'Inicio';
+          const end = document.getElementById('consolidated-end-date')?.value || 'Fin';
+          printRange.textContent = `${start} al ${end}`;
+        }
+        window.print();
+      });
+    }
+
+    // 3. Resumen Mensual
+    const btnExportMonthlyPDF = document.getElementById('btn-export-monthly-pdf');
+    if (btnExportMonthlyPDF) {
+      btnExportMonthlyPDF.addEventListener('click', () => {
+        const printMonth = document.getElementById('print-monthly-selected');
+        const monthInput = document.getElementById('monthly-select-month');
+        if (printMonth && monthInput) {
+          printMonth.textContent = monthInput.value || 'Mes Actual';
+        }
+        window.print();
+      });
+    }
+
+    // 4. Resumen Diario
+    const btnExportDailyPDF = document.getElementById('btn-export-daily-pdf');
+    if (btnExportDailyPDF) {
+      btnExportDailyPDF.addEventListener('click', () => {
+        const printDate = document.getElementById('print-daily-selected');
+        const dateInput = document.getElementById('daily-select-date');
+        if (printDate && dateInput) {
+          printDate.textContent = dateInput.value || 'Hoy';
+        }
+        window.print();
+      });
+    }
+  };
+
+  setupPDFExportListeners();
 
   // --- Lógica e interactividad de filtros de fecha ---
 
@@ -5217,8 +5444,26 @@ function loadMonthlyReport() {
   renderMonthlyTable(history);
 }
 
+let monthlySortCol = 'name';
+let monthlySortDir = 'asc';
+
+function getMonthlySortIconHTML(colKey) {
+  const isActive = (monthlySortCol === colKey);
+  const iconName = isActive 
+    ? (monthlySortDir === 'desc' ? 'arrow_downward' : 'arrow_upward') 
+    : 'unfold_more';
+  
+  const bgStyle = isActive ? 'background: #3b82f6; color: #ffffff;' : 'background: rgba(255, 255, 255, 0.2); color: #cbd5e1;';
+  const iconOpacity = isActive ? 'opacity: 1;' : 'opacity: 0.7;';
+
+  return `<span class="sort-icon-badge" style="display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; ${bgStyle} margin-left: 5px; vertical-align: middle; transition: all 0.2s ease;">
+    <span class="material-symbols-rounded" style="font-size: 12px; ${iconOpacity}">${iconName}</span>
+  </span>`;
+}
+
 function renderMonthlyTable(history) {
   const tbody = document.getElementById('admin-monthly-table-body');
+  const thead = document.getElementById('admin-monthly-thead');
   if (!tbody) return;
 
   const monthInput = document.getElementById('monthly-select-month');
@@ -5231,6 +5476,60 @@ function renderMonthlyTable(history) {
   const [yearStr, monthStr] = selectedMonth.split('-');
   const year = parseInt(yearStr, 10);
   const monthIndex = parseInt(monthStr, 10) - 1;
+
+  if (thead) {
+    thead.innerHTML = `
+      <tr>
+        <th class="sortable-th" data-col="name" style="min-width: 200px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por nombre de colaborador">
+          <span>Colaborador</span>${getMonthlySortIconHTML('name')}
+        </th>
+        <th class="sortable-th" data-col="dni" style="min-width: 100px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por DNI">
+          <span>DNI</span>${getMonthlySortIconHTML('dni')}
+        </th>
+        <th class="sortable-th text-center" data-col="diasLaborables" style="min-width: 110px; cursor: pointer; user-select: none;">
+          <span>Días Laborables</span>${getMonthlySortIconHTML('diasLaborables')}
+        </th>
+        <th class="sortable-th text-center" data-col="diasAsistidos" style="min-width: 110px; cursor: pointer; user-select: none;">
+          <span>Días Asistidos</span>${getMonthlySortIconHTML('diasAsistidos')}
+        </th>
+        <th class="sortable-th text-center" data-col="faltas" style="min-width: 120px; cursor: pointer; user-select: none;" title="Haz clic para ordenar de Mayor a Menor por faltas">
+          <span>Faltas (Inasistencias)</span>${getMonthlySortIconHTML('faltas')}
+        </th>
+        <th class="sortable-th text-center" data-col="diasJustificados" style="min-width: 120px; cursor: pointer; user-select: none;">
+          <span>Días Justificados</span>${getMonthlySortIconHTML('diasJustificados')}
+        </th>
+        <th class="sortable-th text-center" data-col="tardanzasCount" style="min-width: 110px; cursor: pointer; user-select: none;" title="Haz clic para ordenar de Mayor a Menor por tardanzas">
+          <span>Tardanzas (Cant.)</span>${getMonthlySortIconHTML('tardanzasCount')}
+        </th>
+        <th class="sortable-th text-center" data-col="tardanzasSeconds" style="min-width: 125px; cursor: pointer; user-select: none;" title="Haz clic para ordenar por tiempo total de tardanzas">
+          <span>Tardanzas (Acum.)</span>${getMonthlySortIconHTML('tardanzasSeconds')}
+        </th>
+        <th class="sortable-th text-center" data-col="excessBreakSeconds" style="min-width: 130px; cursor: pointer; user-select: none;">
+          <span>Exceso Break (Acum.)</span>${getMonthlySortIconHTML('excessBreakSeconds')}
+        </th>
+        <th class="sortable-th text-center cell-total-worked" data-col="totalWorkedSeconds" style="min-width: 130px; cursor: pointer; user-select: none;" title="Haz clic para ordenar de Mayor a Menor por total trabajado">
+          <span>Trabajo Real (Total)</span>${getMonthlySortIconHTML('totalWorkedSeconds')}
+        </th>
+        <th class="sortable-th text-center" data-col="horasAdicionalesSeconds" style="min-width: 110px; cursor: pointer; user-select: none;">
+          <span>Horas Extra</span>${getMonthlySortIconHTML('horasAdicionalesSeconds')}
+        </th>
+      </tr>
+    `;
+
+    thead.querySelectorAll('.sortable-th').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.getAttribute('data-col');
+        if (!col) return;
+        if (monthlySortCol === col) {
+          monthlySortDir = monthlySortDir === 'desc' ? 'asc' : 'desc';
+        } else {
+          monthlySortCol = col;
+          monthlySortDir = (col === 'name' || col === 'dni') ? 'asc' : 'desc';
+        }
+        renderMonthlyTable(history);
+      });
+    });
+  }
 
   const normalizedHistory = history.map(item => {
     const normDate = normalizeDateStr(item.dateStr);
@@ -5265,11 +5564,6 @@ function renderMonthlyTable(history) {
   const now = new Date();
   const totalDaysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
-  const FERIADOS = [
-    "01/01", "01/05", "29/06", "23/07", "28/07", "29/07", 
-    "06/08", "30/08", "08/10", "01/11", "08/12", "09/12", "25/12"
-  ];
-
   tbody.innerHTML = '';
   const dnis = Object.keys(employeesDatabase);
   
@@ -5278,7 +5572,7 @@ function renderMonthlyTable(history) {
     return;
   }
 
-  dnis.forEach(dni => {
+  const rowDataList = dnis.map(dni => {
     const employee = employeesDatabase[dni];
     const isFlexible = (employee.workStart === "-" || employee.workStart === "—" || employee.weeklySchedule === "flexible");
     
@@ -5292,8 +5586,8 @@ function renderMonthlyTable(history) {
     let totalWorkedSeconds = 0;
     let diasFeriados = 0;
     let diasDescanso = 0;
-    let horasExtraSeconds = 0; // Horas trabajadas en feriados/descanso
-    let horasAdicionalesSeconds = 0; // Horas adicionales (Salida real > Salida programada)
+    let horasExtraSeconds = 0;
+    let horasAdicionalesSeconds = 0;
 
     let schedObj = employee.weeklySchedule;
     if (typeof schedObj === 'string' && schedObj.trim() !== '') {
@@ -5349,7 +5643,6 @@ function renderMonthlyTable(history) {
         const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
 
         if (isWorkday) {
-          // Día laboral normal
           diasAsistidos++;
           
           if (report.tardiness) {
@@ -5378,7 +5671,6 @@ function renderMonthlyTable(history) {
             horasAdicionalesSeconds += report.horasAdicionalesSeconds;
           }
         } else {
-          // Trabajó en feriado o día de descanso → horas extra
           if (report.workedSeconds > 0) {
             horasExtraSeconds += report.workedSeconds;
           }
@@ -5402,19 +5694,49 @@ function renderMonthlyTable(history) {
       }
     }
 
+    return {
+      dni,
+      name: employee.name,
+      diasLaborables,
+      diasAsistidos,
+      faltas,
+      diasJustificados,
+      tardanzasCount,
+      tardanzasSeconds,
+      excessBreakSeconds,
+      totalWorkedSeconds,
+      horasAdicionalesSeconds
+    };
+  });
+
+  // Ordenar lista de datos según la columna activa
+  rowDataList.sort((a, b) => {
+    let valA = a[monthlySortCol];
+    let valB = b[monthlySortCol];
+    if (typeof valA === 'string') {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+    }
+    if (valA < valB) return monthlySortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return monthlySortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  tbody.innerHTML = '';
+  rowDataList.forEach(row => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="table-employee-name" style="font-weight: 500;">${employee.name}</td>
-      <td>${dni}</td>
-      <td class="text-center">${diasLaborables}</td>
-      <td class="text-center">${diasAsistidos}</td>
-      <td class="text-center" style="font-weight: 600; color: ${faltas > 0 ? 'var(--color-error)' : 'var(--text-secondary)'};">${faltas}</td>
-      <td class="text-center" style="font-weight: 600; color: ${diasJustificados > 0 ? '#ffa500' : 'var(--text-secondary)'};">${diasJustificados}</td>
-      <td class="text-center" style="font-weight: 600; color: ${tardanzasCount > 0 ? 'var(--color-warning)' : 'var(--text-secondary)'};">${tardanzasCount}</td>
-      <td class="text-center" style="${tardanzasSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${tardanzasSeconds > 0 ? formatSecondsToHHMMSS(tardanzasSeconds) : '00:00:00'}</td>
-      <td class="text-center" style="color: ${excessBreakSeconds > 0 ? 'var(--color-warning)' : 'var(--text-secondary)'};">${excessBreakSeconds > 0 ? formatSecondsToHHMMSS(excessBreakSeconds) : '00:00:00'}</td>
-      <td class="text-center" style="font-weight: 600; color: var(--text-primary);">${totalWorkedSeconds > 0 ? formatSecondsToHHMMSS(totalWorkedSeconds) : '00:00:00'}</td>
-      <td class="text-center" style="font-weight: 600; color: var(--text-primary);">${horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(horasAdicionalesSeconds) : '00:00:00'}</td>
+      <td class="table-employee-name" style="font-weight: 500;">${row.name}</td>
+      <td>${row.dni}</td>
+      <td class="text-center">${row.diasLaborables}</td>
+      <td class="text-center">${row.diasAsistidos}</td>
+      <td class="text-center" style="font-weight: 600; color: ${row.faltas > 0 ? 'var(--color-error)' : 'var(--text-secondary)'};">${row.faltas}</td>
+      <td class="text-center" style="font-weight: 600; color: ${row.diasJustificados > 0 ? '#ffa500' : 'var(--text-secondary)'};">${row.diasJustificados}</td>
+      <td class="text-center" style="font-weight: 600; color: ${row.tardanzasCount > 0 ? 'var(--color-warning)' : 'var(--text-secondary)'};">${row.tardanzasCount}</td>
+      <td class="text-center" style="${row.tardanzasSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${row.tardanzasSeconds > 0 ? formatSecondsToHHMMSS(row.tardanzasSeconds) : '00:00:00'}</td>
+      <td class="text-center" style="color: ${row.excessBreakSeconds > 0 ? 'var(--color-warning)' : 'var(--text-secondary)'};">${row.excessBreakSeconds > 0 ? formatSecondsToHHMMSS(row.excessBreakSeconds) : '00:00:00'}</td>
+      <td class="text-center cell-total-worked">${row.totalWorkedSeconds > 0 ? formatSecondsToHHMMSS(row.totalWorkedSeconds) : '00:00:00'}</td>
+      <td class="text-center" style="font-weight: 600; color: var(--text-primary);">${row.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(row.horasAdicionalesSeconds) : '00:00:00'}</td>
     `;
     tbody.appendChild(tr);
   });
