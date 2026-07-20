@@ -125,6 +125,11 @@ body {
   margin: 0 auto;
   position: relative;
   z-index: 1;
+  transition: max-width 0.3s ease;
+}
+
+.app-container:has(#view-admin:not(.hidden)) {
+  max-width: 1450px;
 }
 
 /* ── HEADER ───────────────────────────────────────────────── */
@@ -223,6 +228,10 @@ body {
   padding: 22px;
   height: 100%;
   transition: background 0.35s ease, border-color 0.35s ease;
+}
+
+.admin-tab-content .card-inner {
+  height: auto;
 }
 
 .inner-header {
@@ -468,6 +477,13 @@ input::-webkit-calendar-picker-indicator:hover {
 .btn-pinpad-clear:hover { background: rgba(239,68,68,0.28); }
 .btn-pinpad-back        { color: var(--text-secondary); }
 
+/* ── VIEW-SPECIFIC CONTAINER SIZES ───────────────────────── */
+#view-login {
+  max-width: 440px;
+  margin: 0 auto;
+  width: 100%;
+}
+
 /* ── EMPLOYEE DASHBOARD ───────────────────────────────────── */
 .dashboard-user-bar {
   display: flex;
@@ -657,6 +673,101 @@ input::-webkit-calendar-picker-indicator:hover {
 /* ── ADMIN PANEL ──────────────────────────────────────────── */
 .admin-stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-bottom: 22px; }
 
+/* ── ANALYTICS GRID METRICS ───────────────────────────────── */
+.admin-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.analytics-card {
+  background: var(--bg-inner);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 96px;
+  box-sizing: border-box;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.analytics-card:hover {
+  border-color: var(--border-focus);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.analytics-ring-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.analytics-ring-val {
+  position: absolute;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.analytics-card-info h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.analytics-card-info p {
+  margin: 4px 0 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.analytics-card-list {
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.analytics-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.stat-row-label {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-row-val {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+@media (max-width: 1200px) {
+  .admin-analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .stat-card { display: flex; align-items: center; gap: 18px; }
 .stat-icon {
   font-size: 30px; width: 52px; height: 52px;
@@ -672,23 +783,76 @@ input::-webkit-calendar-picker-indicator:hover {
 
 .admin-panel-layout { grid-template-columns: 2.2fr 1fr; }
 
-/* Admin table */
-.admin-table { width: 100%; border-collapse: collapse; text-align: left; }
+/* Admin table - Defined Colored Header & Light Content Rows */
+.admin-table { 
+  width: 100%; 
+  border-collapse: separate; 
+  border-spacing: 0; 
+  text-align: left; 
+}
+
 .admin-table th {
-  padding: 10px 8px;
-  color: var(--text-muted);
-  font-weight: 600; font-size: 0.75rem;
-  text-transform: uppercase; letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 13px 12px;
+  background: #1e293b !important; /* Encabezado de color definido Azul Marino Slate */
+  color: #ffffff !important;        /* Texto de cabecera blanco nítido */
+  font-weight: 700;
+  font-size: 0.77rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 2px solid #0f172a;
 }
-.admin-table td {
-  padding: 10px 8px;
+
+.admin-table th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.admin-table th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.sortable-th:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+}
+
+.sortable-th:hover .sort-icon-badge {
+  transform: scale(1.1);
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+.admin-table tbody td {
+  padding: 11px 12px;
   border-bottom: 1px solid var(--border-color);
-  font-size: 0.82rem; vertical-align: middle;
+  font-size: 0.83rem; 
+  vertical-align: middle;
+  background: var(--bg-card, #ffffff); /* Fondo claro de contenido */
   color: var(--text-primary);
+  transition: background 0.15s ease;
 }
-.admin-table tr:last-child td { border-bottom: none; }
-.admin-table tr:hover td      { background: var(--surface-1); }
+
+[data-theme="light"] .admin-table tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.admin-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 8px;
+}
+
+.admin-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 8px;
+}
+
+.admin-table tbody tr:hover td { 
+  background: var(--surface-hover, #f1f5f9) !important; 
+}
 
 .table-employee-name { font-weight: 600; font-family: var(--font-display); color: var(--text-primary); white-space: nowrap; min-width: 180px; }
 .table-timestamp     { font-family: var(--font-display); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
@@ -705,18 +869,18 @@ input::-webkit-calendar-picker-indicator:hover {
 .table-status-badge.Desconectado      { background: var(--surface-1); color: var(--text-muted); border: 1px solid var(--border-color); }
 
 /* Estilos para celdas del reporte consolidado */
-.cell-assisted { background: rgba(16, 185, 129, 0.08) !important; color: #10b981 !important; text-align: center; font-weight: 600; cursor: help; }
-.cell-tardiness { background: rgba(245, 158, 11, 0.08) !important; color: #f59e0b !important; text-align: center; font-weight: 600; cursor: help; }
-.cell-absent { background: rgba(239, 68, 68, 0.08) !important; color: #ef4444 !important; text-align: center; font-weight: 600; cursor: help; }
+.cell-assisted { background: rgba(16, 185, 129, 0.08) !important; color: #10b981 !important; text-align: center; font-weight: 600; font-family: var(--font-display); cursor: help; }
+.cell-tardiness { background: rgba(245, 158, 11, 0.08) !important; color: #f59e0b !important; text-align: center; font-weight: 600; font-family: var(--font-display); cursor: help; }
+.cell-absent { background: rgba(239, 68, 68, 0.08) !important; color: #ef4444 !important; text-align: center; font-weight: 600; font-family: var(--font-display); cursor: help; }
 .cell-justified { background: rgba(99, 102, 241, 0.08) !important; color: #6366f1 !important; text-align: center; font-weight: 600; cursor: help; }
 .cell-holiday { background: rgba(6, 182, 212, 0.08) !important; color: #06b6d4 !important; text-align: center; cursor: help; }
 .cell-rest { background: rgba(100, 116, 139, 0.05) !important; color: var(--text-muted) !important; text-align: center; font-style: italic; cursor: help; }
 
 /* Totales fijos del consolidado */
-.cell-total-worked { font-weight: 700 !important; color: var(--color-blue) !important; text-align: center; background: rgba(59, 130, 246, 0.05); }
-.cell-total-tardy { font-weight: 700 !important; color: #f59e0b !important; text-align: center; background: rgba(245, 158, 11, 0.05); }
-.cell-total-tardy-seconds { font-weight: 700 !important; color: #f59e0b !important; text-align: center; background: rgba(245, 158, 11, 0.05); }
-.cell-total-absent { font-weight: 700 !important; color: #ef4444 !important; text-align: center; background: rgba(239, 68, 68, 0.05); }
+.cell-total-worked { font-weight: 700 !important; font-family: var(--font-display); color: #2563eb !important; text-align: center; background: rgba(37, 99, 235, 0.06) !important; border-left: 2px solid rgba(37, 99, 235, 0.15) !important; }
+.cell-total-tardy { font-weight: 700 !important; font-family: var(--font-display); color: #d97706 !important; text-align: center; background: rgba(217, 119, 6, 0.06) !important; }
+.cell-total-tardy-seconds { font-weight: 700 !important; font-family: var(--font-display); color: #d97706 !important; text-align: center; background: rgba(217, 119, 6, 0.06) !important; }
+.cell-total-absent { font-weight: 700 !important; font-family: var(--font-display); color: #dc2626 !important; text-align: center; background: rgba(220, 38, 38, 0.06) !important; }
 
 .table-responsive { width: 100%; overflow-x: auto; }
 
@@ -743,13 +907,252 @@ input::-webkit-calendar-picker-indicator:hover {
 .step-list-mini li::marker { color: var(--primary); font-weight: bold; }
 .bg-dark-secondary { background: var(--surface-1) !important; }
 
-/* ── ADMIN TABS ───────────────────────────────────────────── */
+/* ── ADMIN TABS & SIDEBAR LAYOUT (FULL SCREEN DASHBOARD) ──── */
+#view-admin.admin-layout-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 900;
+  border-radius: 0 !important;
+  border: none !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  background: var(--bg-page);
+}
+
+#view-admin.hidden {
+  display: none !important;
+}
+
+/* Sidebar Container */
+.admin-sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 18px;
+  gap: 20px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Sidebar Brand Header */
+.admin-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Sidebar Nav Container */
+.admin-sidebar-nav-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-grow: 1;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sidebar-nav-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-left: 6px;
+  margin-bottom: 4px;
+}
+
 .admin-tabs-nav {
   display: flex;
   gap: 12px;
   margin-bottom: 22px;
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 12px;
+}
+
+.admin-tabs-nav.vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.admin-tabs-nav.vertical .btn-admin-tab {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.22s ease;
+}
+
+.admin-tabs-nav.vertical .btn-admin-tab .material-symbols-rounded {
+  font-size: 20px;
+  transition: transform 0.2s ease;
+}
+
+.admin-tabs-nav.vertical .btn-admin-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  transform: translateX(3px);
+}
+
+.admin-tabs-nav.vertical .btn-admin-tab.active {
+  background: linear-gradient(135deg, var(--primary), #3b82f6);
+  color: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 4px 14px var(--primary-glow);
+  font-weight: 600;
+}
+
+.admin-tabs-nav.vertical .btn-admin-tab.active .material-symbols-rounded {
+  color: #ffffff;
+}
+
+/* Sidebar Footer Actions */
+.admin-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-sidebar-action {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: 0.85rem;
+  height: 40px;
+}
+
+/* Main Content Area */
+.admin-main-content {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 36px;
+  height: 100vh;
+  overflow-y: auto;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--bg-page);
+}
+
+.admin-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.admin-top-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.admin-page-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Top Bar Actions (Top Right Corner) */
+.admin-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-top-action {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  outline: none;
+  font-family: var(--font-display);
+  transition: all 0.22s ease;
+  box-sizing: border-box;
+}
+
+.btn-top-theme {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.btn-top-theme:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-top-sync {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: 1px solid #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.28);
+}
+
+.btn-top-sync:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border-color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+.btn-top-close {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.btn-top-close:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .btn-admin-tab {
@@ -779,6 +1182,30 @@ input::-webkit-calendar-picker-indicator:hover {
   color: #fff;
   border-color: var(--primary);
   box-shadow: 0 0 12px var(--primary-glow);
+}
+
+/* Responsive Media Queries for Admin Sidebar */
+@media (max-width: 992px) {
+  #view-admin.admin-layout-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 18px;
+  }
+
+  .admin-tabs-nav.vertical {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .admin-tabs-nav.vertical .btn-admin-tab {
+    white-space: nowrap;
+    width: auto;
+  }
 }
 
 .admin-tab-content {
@@ -992,33 +1419,37 @@ input::-webkit-calendar-picker-indicator:hover {
 /* ── ESTILOS DE IMPRESIÓN (PDF NATIVO) ─────────────────────── */
 @media print {
   @page {
-    size: A4 landscape; /* Forzar orientación horizontal para reportes con muchas columnas */
-    margin: 8mm 10mm;
+    size: A4 landscape; /* Orientación horizontal para máxima visibilidad */
+    margin: 8mm 8mm;
   }
   
   html, body {
     background: #ffffff !important;
-    color: #000000 !important;
+    color: #0f172a !important;
     font-family: 'Outfit', 'Inter', sans-serif !important;
     width: 100% !important;
     height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  
-  .print-only {
-    display: block !important;
-  }
-  
-  .no-print {
-    display: none !important;
-  }
-  
-  /* Ocultar elementos distractores */
+
+  /* Eliminar por completo la barra lateral (aside.admin-sidebar), cabeceras y elementos secundarios */
+  aside,
+  header,
+  footer,
   .blob,
   .app-header,
+  #view-login,
+  #view-dashboard,
+  .admin-sidebar,
+  .admin-sidebar-brand,
+  .admin-sidebar-nav-container,
+  .admin-sidebar-wrapper,
+  .admin-top-bar,
+  .admin-top-actions,
   .admin-tabs-nav,
   .report-filter-bar,
   .consolidated-filter-bar,
@@ -1039,249 +1470,224 @@ input::-webkit-calendar-picker-indicator:hover {
   .dashboard-user-bar,
   #tab-live-content th:last-child,
   #admin-live-table-body td:last-child,
-  #btn-admin-sync {
+  #btn-admin-sync,
+  button,
+  .no-print {
     display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
   }
 
-  .app-container {
+  /* Garantizar que los contenedores principales fluyan desde la parte superior sin espacios */
+  .app-container,
+  .app-main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  #view-admin,
+  #view-admin.admin-layout-sidebar {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .admin-main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+
+  .card,
+  .card-inner,
+  .report-container,
+  .report-results-wrapper {
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
     width: 100% !important;
     box-shadow: none !important;
-    background: none !important;
-  }
-
-  .card {
     background: #ffffff !important;
-    color: #000000 !important;
-    box-shadow: none !important;
     border: none !important;
-    border-radius: 0 !important; /* Quitar puntas curvas al imprimir */
+    border-radius: 0 !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
+    overflow: visible !important;
   }
 
   .card::before {
-    display: none !important; /* Quitar la barra degradada superior en impresión */
+    display: none !important;
   }
 
+  /* Mostrar exclusivamente la pestaña activa */
   .admin-tab-content.hidden {
     display: none !important;
   }
   
-  .admin-tab-content {
+  .admin-tab-content.active,
+  .admin-tab-content:not(.hidden) {
     display: block !important;
     width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  /* Evitar desbordes de tabla en el PDF */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Membrete formal de impresión */
+  .print-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 2px solid #0f172a !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 12px !important;
+    background: #ffffff !important;
+  }
+
+  .print-header h1 {
+    font-size: 1.3rem !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+  }
+
+  .print-header p {
+    font-size: 0.78rem !important;
+    color: #475569 !important;
+    margin: 2px 0 0 0 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Formato corporativo limpio de tabla para PDF */
   .table-responsive,
   .report-scroll-container {
     overflow: visible !important;
     max-height: none !important;
+    height: auto !important;
     width: 100% !important;
-    max-width: 100% !important;
     border: none !important;
   }
 
   .admin-table {
     width: 100% !important;
     border-collapse: collapse !important;
-    background: transparent !important;
-    color: #334155 !important;
-    margin-top: 15px !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-
-  .admin-table th, 
-  .admin-table td {
-    border: none !important;
-    color: #334155 !important;
-    background: transparent !important;
-    padding: 8px 4px !important; /* Padding horizontal reducido para evitar desbordes */
-    font-size: 10.5px !important; /* Fuente compacta legible */
-    text-align: center !important;
-  }
-
-  .admin-table td {
-    white-space: nowrap !important; /* Evitar que los datos se rompan en dos líneas */
+    background: #ffffff !important;
+    margin-top: 4px !important;
+    border: 1px solid #cbd5e1 !important;
   }
 
   .admin-table th {
-    border-bottom: 2px solid #ef4444 !important; /* Línea roja elegante abajo del header */
-    background: transparent !important; /* Sin fondo */
-    color: #0f172a !important; /* Texto oscuro */
+    background: #0f172a !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    padding: 7px 6px !important;
+    font-size: 9.5px !important;
     font-weight: 700 !important;
     text-transform: uppercase !important;
-    font-size: 10px !important;
-    letter-spacing: 0.3px !important;
-    white-space: normal !important; /* Permitir salto de línea en encabezados largos */
-    vertical-align: bottom !important;
-    line-height: 1.2 !important;
+    letter-spacing: 0.4px !important;
+    border: 1px solid #0f172a !important;
+    text-align: center !important;
   }
 
-  .admin-table tbody tr:nth-child(even) td {
-    background: #f8fafc !important; /* Cebra sutil */
+  .admin-table td {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    padding: 6px 6px !important;
+    font-size: 9px !important;
+    border: 1px solid #e2e8f0 !important;
+    vertical-align: middle !important;
+    white-space: nowrap !important;
   }
 
-  /* Alinear nombres a la izquierda */
   .admin-table td.table-employee-name {
     text-align: left !important;
     font-weight: 600 !important;
-    white-space: normal !important; /* Permitir envoltura si es necesario */
-    min-width: auto !important; /* Remover el min-width de 180px que empujaba la tabla */
   }
 
-  .card-inner, 
-  .report-container, 
-  .report-results-wrapper {
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-    background: transparent !important;
-    border: none !important;
+  .admin-table tbody tr:nth-child(even) td {
+    background: #f8fafc !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Desactivar fijado estático (sticky) para impresión */
+  #admin-consolidated-thead th:nth-child(1),
+  #admin-consolidated-thead th:nth-child(2),
+  #admin-consolidated-table-body td:nth-child(1),
+  #admin-consolidated-table-body td:nth-child(2) {
+    position: static !important;
     box-shadow: none !important;
-  }
-
-  /* Encabezado formal Premium */
-  .print-header {
-    border-bottom: 2px solid #e2e8f0 !important; /* Línea gris sutil */
-    padding-bottom: 18px !important;
-    margin-bottom: 25px !important;
-    background: transparent !important;
-  }
-
-  .print-header h1 {
-    font-size: 1.9rem !important;
-    color: #0f172a !important;
-    font-weight: 800 !important;
-    margin-bottom: 4px !important;
-  }
-
-  /* Caja de Horario Asignado Centrada (Sin fondo, sin marcos) */
-  .report-agent-schedule-summary {
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid #e2e8f0 !important; /* Solo línea divisoria abajo */
-    border-radius: 0 !important;
-    color: #0f172a !important;
-    margin-bottom: 30px !important;
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    padding: 16px 0 !important;
-    text-align: center !important;
-    gap: 10px !important;
-  }
-
-  .signature-block {
-    page-break-inside: avoid !important;
-    margin-top: 50px !important;
-  }
-
-  .report-schedule-item {
-    border-right: 1.5px solid #cbd5e1 !important;
-  }
-
-  .report-schedule-item:last-child {
-    border-right: none !important;
-  }
-
-  .report-schedule-item h4 {
-    color: #475569 !important;
-    font-weight: 700 !important;
-    font-size: 0.7rem !important;
-    letter-spacing: 0.8px !important;
-    text-transform: uppercase !important;
-    margin-bottom: 5px !important;
-  }
-
-  .report-schedule-item p {
-    color: #0f172a !important;
-    font-weight: 700 !important;
-    font-size: 1.1rem !important;
-  }
-
-  .diff-negative {
-    color: #d32f2f !important;
-    font-weight: bold !important;
-  }
-
-  .diff-positive {
-    color: #2e7d32 !important;
-    font-weight: bold !important;
-  }
-
-  .diff-neutral {
-    color: #475569 !important;
-    font-weight: bold !important;
-  }
-
-  .badge-tardiness {
-    border: 1px solid #ff4d4d !important;
-    color: #d32f2f !important;
-    background: #ffebee !important;
-    padding: 1px 4px !important;
-    border-radius: 4px !important;
-    display: inline-flex !important;
-    font-size: 0.65rem !important;
-    margin-left: 4px !important;
-  }
-  
-  .badge-tardiness .material-symbols-rounded {
-    font-size: 10px !important;
-  }
-  
-  .badge-excess-break {
-    border: 1px solid #ff9100 !important;
-    color: #e65100 !important;
-    background: #fff3e0 !important;
-    padding: 1px 4px !important;
-    border-radius: 4px !important;
-    display: inline-flex !important;
-    font-size: 0.65rem !important;
-    margin-left: 4px !important;
-  }
-  
-  .badge-excess-break .material-symbols-rounded {
-    font-size: 10px !important;
   }
 }
 
 /* ==========================================================================
    COLUMNAS ESTÁTICAS (STICKY COLUMNS) EN RESUMEN CONSOLIDADO (EXCLUSIVO)
    ========================================================================== */
-#admin-consolidated-thead th:nth-child(1),
+#admin-consolidated-thead th:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.2);
+}
+
+#admin-consolidated-thead th:nth-child(2) {
+  position: sticky;
+  left: 220px;
+  z-index: 12;
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.2);
+}
+
 #admin-consolidated-table-body td:nth-child(1) {
   position: sticky;
   left: 0;
   z-index: 10;
-  background-color: var(--bg-page) !important;
-  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.15);
+  background-color: var(--bg-card, #ffffff) !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
 }
 
-#admin-consolidated-thead th:nth-child(2),
 #admin-consolidated-table-body td:nth-child(2) {
   position: sticky;
-  left: 220px; /* Ancho exacto de la columna 1 */
+  left: 220px;
   z-index: 10;
-  background-color: var(--bg-page) !important;
-  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.15);
+  background-color: var(--bg-card, #ffffff) !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
 }
 
-#admin-consolidated-thead th:nth-child(1),
-#admin-consolidated-thead th:nth-child(2) {
-  z-index: 12;
+/* Efecto cebra y hover sobre las celdas congeladas */
+[data-theme="light"] #admin-consolidated-table-body tr:nth-child(even) td:nth-child(1),
+[data-theme="light"] #admin-consolidated-table-body tr:nth-child(even) td:nth-child(2) {
+  background-color: #f8fafc !important;
 }
 
-/* Efecto hover sobre las celdas congeladas */
 #admin-consolidated-table-body tr:hover td:nth-child(1),
 #admin-consolidated-table-body tr:hover td:nth-child(2) {
-  background-color: var(--bg-secondary) !important;
+  background-color: var(--surface-hover, #f1f5f9) !important;
 }
 
 /* ==========================================================================
@@ -1291,8 +1697,9 @@ input::-webkit-calendar-picker-indicator:hover {
   position: sticky;
   top: 0;
   z-index: 15;
-  background-color: var(--bg-page) !important;
-  box-shadow: 0 2px 2px -1px rgba(0,0,0,0.15);
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
 #tab-reports-content .admin-table tr.summary-row td {
@@ -1504,8 +1911,7 @@ input::-webkit-calendar-picker-indicator:hover {
   position: sticky;
   top: 0;
   z-index: 15;
-  background-color: var(--bg-card) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 2px 2px -1px rgba(0,0,0,0.15);
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
