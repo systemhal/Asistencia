@@ -32,7 +32,7 @@
       <div class="header-actions">
         <!-- Toggle Claro / Oscuro -->
         <button id="btn-theme-toggle" class="btn-theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
-          <span class="material-symbols-rounded" id="theme-icon">light_mode</span>
+          <span class="material-symbols-rounded theme-icon" id="theme-icon">light_mode</span>
         </button>
         <button id="btn-admin-toggle" class="btn-icon-text">
           <span class="material-symbols-rounded">admin_panel_settings</span>
@@ -58,7 +58,7 @@
             <label for="input-dni">Número de DNI</label>
             <div class="input-wrapper">
               <span class="material-symbols-rounded input-icon">badge</span>
-              <input type="text" id="input-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 73507283" autocomplete="username" required maxlength="8">
+              <input type="text" id="input-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 77007788" autocomplete="username" required maxlength="8">
             </div>
             <p id="dni-error-msg" class="helper-text error-text hidden">DNI no registrado en el sistema</p>
           </div>
@@ -244,67 +244,79 @@
       </section>
 
       <!-- VIEW 3: ADMIN DASHBOARD (RESUMEN DE CONEXIONES) -->
-      <section id="view-admin" class="card glassmorphism animate-fade-in hidden">
-        <div class="dashboard-user-bar">
-          <div class="user-info">
-            <div class="avatar-glow admin-glow" style="background: #ffffff; border: 2.5px solid var(--color-error); padding: 3px; box-shadow: 0 0 10px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; width: 50px; height: 50px; border-radius: 50%; flex-shrink: 0;">
+      <section id="view-admin" class="card glassmorphism animate-fade-in hidden admin-layout-sidebar">
+        <!-- SIDEBAR IZQUIERDA -->
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar-brand">
+            <div class="avatar-glow admin-glow" style="background: #ffffff; border: 2.5px solid var(--color-error); padding: 3px; box-shadow: 0 0 10px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;">
               <img src="icono.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
             </div>
             <div>
-              <h2>Panel de Monitoreo General</h2>
-              <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
-                <span class="badge badge-admin">Acceso Administrativo</span>
-                <!-- Indicador de Estado de Conexión Nube -->
-                <div id="cloud-status-indicator" style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); transition: all 0.3s ease;">
-                  <span class="status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; box-shadow: 0 0 6px #22c55e; transition: all 0.3s ease;"></span>
-                  <span class="status-text">Conectado</span>
-                </div>
-              </div>
+              <h2 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0;">AsistenciaPro</h2>
+              <span class="badge badge-admin" style="font-size: 0.7rem;">Acceso Admin</span>
             </div>
           </div>
-          <div style="display: flex; gap: 10px;">
-            <button id="btn-admin-sync" class="btn-primary" style="background: var(--color-info); border-color: var(--color-info); height: 42px; display: inline-flex; align-items: center; gap: 8px;">
-              <span>Sincronizar Nube</span>
-              <span class="material-symbols-rounded">sync</span>
-            </button>
-            <button id="btn-admin-close" class="btn-outline" style="height: 42px; display: inline-flex; align-items: center; gap: 8px;">
-              <span>Volver a Marcación</span>
-              <span class="material-symbols-rounded">arrow_back</span>
-            </button>
-          </div>
-        </div>
 
-        <!-- Pestañas del Administrador -->
-        <div class="admin-tabs-nav">
-          <button class="btn-admin-tab active" data-tab="live">
-            <span class="material-symbols-rounded">sensors</span>
-            <span>Monitoreo en Vivo</span>
-          </button>
-          <button class="btn-admin-tab" data-tab="daily">
-            <span class="material-symbols-rounded">calendar_today</span>
-            <span>Resumen Diario</span>
-          </button>
-          <button class="btn-admin-tab" data-tab="consolidated">
-            <span class="material-symbols-rounded">table_chart</span>
-            <span>Resumen General</span>
-          </button>
-          <button class="btn-admin-tab" data-tab="monthly">
-            <span class="material-symbols-rounded">calendar_month</span>
-            <span>Resumen Mensual</span>
-          </button>
-          <button class="btn-admin-tab" data-tab="reports">
-            <span class="material-symbols-rounded">analytics</span>
-            <span>Reportes por Agente</span>
-          </button>
-          <button class="btn-admin-tab" data-tab="gerencial">
-            <span class="material-symbols-rounded">leaderboard</span>
-            <span>Vista Gerencial</span>
-          </button>
-          <button class="btn-admin-tab" data-tab="register">
-            <span class="material-symbols-rounded">settings</span>
-            <span>Gestión y Configuración</span>
-          </button>
-        </div>
+          <div class="admin-sidebar-nav-container">
+            <span class="sidebar-nav-title">Navegación</span>
+            <nav class="admin-tabs-nav vertical">
+              <button class="btn-admin-tab active" data-tab="live">
+                <span class="material-symbols-rounded">sensors</span>
+                <span>Monitoreo en Vivo</span>
+              </button>
+              <button class="btn-admin-tab" data-tab="daily">
+                <span class="material-symbols-rounded">calendar_today</span>
+                <span>Resumen Diario</span>
+              </button>
+              <button class="btn-admin-tab" data-tab="consolidated">
+                <span class="material-symbols-rounded">table_chart</span>
+                <span>Resumen General</span>
+              </button>
+              <button class="btn-admin-tab" data-tab="monthly">
+                <span class="material-symbols-rounded">calendar_month</span>
+                <span>Resumen Mensual</span>
+              </button>
+              <button class="btn-admin-tab" data-tab="reports">
+                <span class="material-symbols-rounded">analytics</span>
+                <span>Reportes por Agente</span>
+              </button>
+              <button class="btn-admin-tab" data-tab="gerencial">
+                <span class="material-symbols-rounded">leaderboard</span>
+                <span>Vista Gerencial</span>
+              </button>
+              <button class="btn-admin-tab" data-tab="register">
+                <span class="material-symbols-rounded">settings</span>
+                <span>Gestión y Configuración</span>
+              </button>
+            </nav>
+          </div>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL DERECHA -->
+        <div class="admin-main-content">
+          <div class="admin-top-bar">
+            <div class="admin-top-info">
+              <h2 class="admin-page-title">Panel de Monitoreo General</h2>
+              <div id="cloud-status-indicator" style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); transition: all 0.3s ease;">
+                <span class="status-dot" style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; box-shadow: 0 0 6px #22c55e; transition: all 0.3s ease;"></span>
+                <span class="status-text">Conectado</span>
+              </div>
+            </div>
+
+            <div class="admin-top-actions">
+              <button id="btn-theme-toggle-admin" class="btn-theme-toggle btn-top-action btn-top-theme" title="Cambiar tema claro / oscuro" aria-label="Cambiar tema">
+                <span class="material-symbols-rounded theme-icon">light_mode</span>
+              </button>
+              <button id="btn-admin-sync" class="btn-top-action btn-top-sync" title="Sincronizar datos con la nube">
+                <span class="material-symbols-rounded">sync</span>
+                <span>Sincronizar Nube</span>
+              </button>
+              <button id="btn-admin-close" class="btn-top-action btn-top-close" title="Volver a la pantalla de marcación">
+                <span>Volver a Marcación</span>
+                <span class="material-symbols-rounded">arrow_forward</span>
+              </button>
+            </div>
+          </div>
 
         <!-- CONTENIDO PESTAÑA 1: MONITOREO EN VIVO -->
         <div id="tab-live-content" class="admin-tab-content active">
@@ -315,66 +327,66 @@
               <span class="material-symbols-rounded text-gradient">analytics</span>
             </div>
             
-            <div class="admin-analytics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px;">
+            <div class="admin-analytics-grid">
               <!-- Tarjeta 1: Tasa de Asistencia -->
-              <div style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 15px; display: flex; align-items: center; gap: 15px;">
-                <div style="position: relative; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  <svg width="60" height="60" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
+              <div class="analytics-card">
+                <div class="analytics-ring-wrap">
+                  <svg width="56" height="56" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
                     <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(30, 144, 255, 0.1)" stroke-width="3" />
                     <path id="analytics-attendance-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#1e90ff" stroke-width="3" stroke-dasharray="0, 100" stroke-linecap="round" style="transition: stroke-dasharray 0.5s ease;" />
                   </svg>
-                  <div style="position: absolute; font-size: 0.85rem; font-weight: 700; color: var(--text-primary);" id="analytics-attendance-pct">0%</div>
+                  <div class="analytics-ring-val" id="analytics-attendance-pct">0%</div>
                 </div>
-                <div>
-                  <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">Asistencia General</h4>
-                  <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: var(--text-secondary);" id="analytics-attendance-text">0 de 0 activos</p>
+                <div class="analytics-card-info">
+                  <h4>Asistencia General</h4>
+                  <p id="analytics-attendance-text">0 de 0 activos</p>
                 </div>
               </div>
               
               <!-- Tarjeta 2: Puntualidad (A tiempo) -->
-              <div style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 15px; display: flex; align-items: center; gap: 15px;">
-                <div style="position: relative; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  <svg width="60" height="60" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
+              <div class="analytics-card">
+                <div class="analytics-ring-wrap">
+                  <svg width="56" height="56" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
                     <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(46, 139, 87, 0.1)" stroke-width="3" />
                     <path id="analytics-punctuality-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#2e8b57" stroke-width="3" stroke-dasharray="0, 100" stroke-linecap="round" style="transition: stroke-dasharray 0.5s ease;" />
                   </svg>
-                  <div style="position: absolute; font-size: 0.85rem; font-weight: 700; color: var(--text-primary);" id="analytics-punctuality-pct">0%</div>
+                  <div class="analytics-ring-val" id="analytics-punctuality-pct">0%</div>
                 </div>
-                <div>
-                  <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">Puntualidad de Hoy</h4>
-                  <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: var(--text-secondary);" id="analytics-punctuality-text">0 de 0 a tiempo</p>
+                <div class="analytics-card-info">
+                  <h4>Puntualidad de Hoy</h4>
+                  <p id="analytics-punctuality-text">0 de 0 a tiempo</p>
                 </div>
               </div>
 
               <!-- Tarjeta 3: Estado de Actividad -->
-              <div style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 15px; display: flex; flex-direction: column; justify-content: center; gap: 6px;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 16px; color: #1e90ff;">group</span> Personal Configurado:</span>
-                  <span style="font-weight: 700; color: var(--text-primary);" id="stat-total-staff">0</span>
+              <div class="analytics-card analytics-card-list">
+                <div class="analytics-stat-row">
+                  <span class="stat-row-label"><span class="material-symbols-rounded" style="font-size: 16px; color: #1e90ff;">group</span> Personal Configurado:</span>
+                  <span class="stat-row-val" id="stat-total-staff">0</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 16px; color: #2e8b57;">check_circle</span> Activos Hoy:</span>
-                  <span style="font-weight: 700; color: var(--text-primary);" id="stat-active-today">0</span>
+                <div class="analytics-stat-row">
+                  <span class="stat-row-label"><span class="material-symbols-rounded" style="font-size: 16px; color: #2e8b57;">check_circle</span> Activos Hoy:</span>
+                  <span class="stat-row-val" id="stat-active-today">0</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 16px; color: #ffa500;">restaurant</span> En Refrigerio:</span>
-                  <span style="font-weight: 700; color: var(--text-primary);" id="stat-in-break">0</span>
+                <div class="analytics-stat-row">
+                  <span class="stat-row-label"><span class="material-symbols-rounded" style="font-size: 16px; color: #ffa500;">restaurant</span> En Refrigerio:</span>
+                  <span class="stat-row-val" id="stat-in-break">0</span>
                 </div>
               </div>
 
               <!-- Tarjeta 4: Ausencias y Descansos -->
-              <div style="background: var(--bg-inner); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 15px; display: flex; flex-direction: column; justify-content: center; gap: 6px;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 16px; color: #ff4d4d;">cancel</span> Faltas (Sin marca):</span>
-                  <span style="font-weight: 700; color: var(--text-primary);" id="analytics-absent-count">0</span>
+              <div class="analytics-card analytics-card-list">
+                <div class="analytics-stat-row">
+                  <span class="stat-row-label"><span class="material-symbols-rounded" style="font-size: 16px; color: #ff4d4d;">cancel</span> Faltas (Sin marca):</span>
+                  <span class="stat-row-val" id="analytics-absent-count">0</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 16px; color: #e65100;">event_busy</span> Justificados/Permisos:</span>
-                  <span style="font-weight: 700; color: var(--text-primary);" id="analytics-justified-count">0</span>
+                <div class="analytics-stat-row">
+                  <span class="stat-row-label"><span class="material-symbols-rounded" style="font-size: 16px; color: #e65100;">event_busy</span> Justificados/Permisos:</span>
+                  <span class="stat-row-val" id="analytics-justified-count">0</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;"><span class="material-symbols-rounded" style="font-size: 16px; color: var(--text-muted);">bedtime</span> Descansos/Feriados:</span>
-                  <span style="font-weight: 700; color: var(--text-primary);" id="analytics-rest-count">0</span>
+                <div class="analytics-stat-row">
+                  <span class="stat-row-label"><span class="material-symbols-rounded" style="font-size: 16px; color: var(--text-muted);">bedtime</span> Descansos/Feriados:</span>
+                  <span class="stat-row-val" id="analytics-rest-count">0</span>
                 </div>
               </div>
             </div>
@@ -517,16 +529,6 @@
                   <option value="month">Mes</option>
                 </select>
               </div>
-              <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label">Período</label>
-                <select id="ger-select-period" class="gerencial-select">
-                  <option value="this_week">Esta semana</option>
-                  <option value="last_week">Semana pasada</option>
-                  <option value="this_month" selected>Este mes</option>
-                  <option value="last_month">Mes pasado</option>
-                  <option value="custom">Rango personalizado</option>
-                </select>
-              </div>
               <div class="gerencial-filters-group" id="ger-custom-range">
                 <label class="gerencial-filter-label">Desde</label>
                 <input type="date" id="ger-start-date" class="gerencial-input">
@@ -646,7 +648,7 @@
                     <label for="reg-dni">Número de DNI</label>
                     <div class="input-wrapper">
                       <span class="material-symbols-rounded input-icon">badge</span>
-                      <input type="text" id="reg-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 74839201" required maxlength="8">
+                      <input type="text" id="reg-dni" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 77007788" required maxlength="8">
                     </div>
                   </div>
 
@@ -654,7 +656,7 @@
                     <label for="reg-name">Nombres y Apellidos Completos</label>
                     <div class="input-wrapper">
                       <span class="material-symbols-rounded input-icon">person</span>
-                      <input type="text" id="reg-name" placeholder="Ej. PEREZ GOMEZ JUAN CARLOS" required>
+                      <input type="text" id="reg-name" placeholder="NOMBRE COMPLETO COLABORADOR" required>
                     </div>
                   </div>
 
@@ -1278,10 +1280,6 @@
                 <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
                 <span>Imprimir / PDF</span>
               </button>
-              <button id="btn-refresh-consolidated" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem; margin-left: auto;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">sync</span>
-                <span>Actualizar Datos</span>
-              </button>
             </div>
 
             <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5;">
@@ -1365,7 +1363,7 @@
 
             <div class="table-responsive report-scroll-container">
               <table class="admin-table">
-                <thead>
+                <thead id="admin-monthly-thead">
                   <tr>
                     <th>Colaborador</th>
                     <th>DNI</th>
@@ -1392,7 +1390,7 @@
 
 
           </div>
-        </div>
+        </div> <!-- Fin de .admin-main-content -->
       </section>
 
     </main>
