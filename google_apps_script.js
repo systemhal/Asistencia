@@ -243,8 +243,9 @@ function doPost(e) {
       var data = sheet.getDataRange().getValues();
       var foundRow = -1;
       
+      var empIdStr = getSafeDni(postData.employeeId);
       for (var i = 1; i < data.length; i++) {
-        if (getSafeDni(data[i][1]) === String(postData.employeeId)) { // Buscar en Columna B (Dni)
+        if (getSafeDni(data[i][1]) === empIdStr) { // Buscar en Columna B (Dni)
           foundRow = i + 1;
           break;
         }
@@ -274,8 +275,9 @@ function doPost(e) {
     if (action === "Eliminar_Personal") {
       var sheet = ss.getSheetByName("Personal");
       var data = sheet.getDataRange().getValues();
+      var empIdStr = getSafeDni(postData.employeeId);
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][1]) === String(postData.employeeId)) { // Buscar en Columna B (Dni)
+        if (getSafeDni(data[i][1]) === empIdStr) { // Buscar en Columna B (Dni)
           sheet.deleteRow(i + 1);
           break;
         }
@@ -291,7 +293,7 @@ function doPost(e) {
       var foundRow = -1;
       
       for (var i = 1; i < data.length; i++) {
-        if (getSafeDni(data[i][0]) === String(postData.employeeId) && data[i][1] === postData.date) {
+        if (getSafeDni(data[i][0]) === getSafeDni(postData.employeeId) && data[i][1] === postData.date) {
           foundRow = i + 1;
           break;
         }
@@ -309,7 +311,7 @@ function doPost(e) {
       // Evitar duplicados en la misma fecha y DNI: borrar la anterior
       let displayData = sheetJust.getDataRange().getDisplayValues();
       for (let i = displayData.length - 1; i > 0; i--) {
-        if (getSafeDni(displayData[i][0]) === String(employeeId) && formatDateValue(displayData[i][1]) === formatDateValue(date)) {
+        if (getSafeDni(displayData[i][0]) === getSafeDni(employeeId) && formatDateValue(displayData[i][1]) === formatDateValue(date)) {
           sheetJust.deleteRow(i + 1);
         }
       }
@@ -330,8 +332,9 @@ function doPost(e) {
     if (action === "Eliminar_Justificacion") {
       var sheet = ss.getSheetByName("Justificaciones");
       var data = sheet.getDataRange().getValues();
+      var targetDni = getSafeDni(postData.employeeId);
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][0]) === String(postData.employeeId) && formatDateValue(data[i][1]) === formatDateValue(postData.date)) {
+        if (getSafeDni(data[i][0]) === targetDni && formatDateValue(data[i][1]) === formatDateValue(postData.date)) {
           sheet.deleteRow(i + 1);
           break;
         }

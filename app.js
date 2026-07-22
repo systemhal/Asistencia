@@ -68,6 +68,45 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+function logDebug(msg, type = 'info') {
+  console.log('[DEBUG]', msg);
+  const container = document.getElementById('debug-overlay-content');
+  if (!container) return;
+  const line = document.createElement('div');
+  line.style.color = type === 'error' ? '#ff6b6b' : (type === 'warn' ? '#ffd166' : '#06d6a0');
+  line.style.marginTop = '3px';
+  line.textContent = `> ${new Date().toLocaleTimeString()} ${msg}`;
+  container.appendChild(line);
+  const parent = document.getElementById('debug-overlay');
+  if (parent) parent.scrollTop = parent.scrollHeight;
+}
+
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+  logDebug(`ERROR: ${msg} (Línea ${lineNo})`, 'error');
+  return false;
+};
+
+function findEmployeeByDni(dni) {
+  if (dni === null || dni === undefined) return null;
+  const target = String(dni).replace(/'/g, '').trim();
+  if (!target) return null;
+
+  if (employeesDatabase[target]) return employeesDatabase[target];
+  if (employeesDatabase[dni]) return employeesDatabase[dni];
+
+  for (const key of Object.keys(employeesDatabase)) {
+    const cleanKey = String(key).replace(/'/g, '').trim();
+    if (cleanKey === target) {
+      return employeesDatabase[key];
+    }
+    const emp = employeesDatabase[key];
+    if (emp && emp.dni && String(emp.dni).replace(/'/g, '').trim() === target) {
+      return emp;
+    }
+  }
+  return null;
+}
 let tardinessTolerance = 5; 
 let cachedAgentHistory = [];
 let cachedConsolidatedHistory = []; 
@@ -1978,10 +2017,11 @@ function updateAdminView() {
     else if (state.action === 'Salida') statusClass = 'Salida';
     
     // Table Row creation
+    const cleanDni = String(dni).replace(/'/g, '').trim();
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="table-employee-name">${employee.name}</td>
-      <td>${dni}</td>
+      <td class="table-employee-name">${escapeHtml(employee.name)}</td>
+      <td>${escapeHtml(cleanDni)}</td>
       <td>
         <span class="table-status-badge ${statusClass}">
           <span class="status-dot ${state.action === 'Desconectado' ? '' : 'status-' + (state.action === 'Inicio Refrigerio' ? 'break' : (state.action === 'Salida' ? 'inactive' : 'active'))}"></span>
@@ -1992,23 +2032,42 @@ function updateAdminView() {
       <td>${getDeviceIconHTML(deviceDisplay)}</td>
       <td>
         <div style="display: flex; gap: 8px; align-items: center; white-space: nowrap;">
-          <button class="btn-table-action" onclick="forceLogoutEmployee('${dni}')" ${state.action === 'Desconectado' ? 'disabled' : ''} title="Forzar Salida" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
-            <span class="material-symbols-rounded" style="font-size: 16px;">logout</span>
-            <span>Forzar Salida</span>
+          <button type="button" class="btn-table-action btn-admin-logout" data-dni="${escapeHtml(cleanDni)}" onclick="event.preventDefault(); forceLogoutEmployee('${escapeHtml(cleanDni)}');" title="Forzar Salida" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; cursor: pointer;">
+            <span class="material-symbols-rounded" style="font-size: 16px; pointer-events: none;">logout</span>
+            <span style="pointer-events: none;">Forzar Salida</span>
           </button>
-          <button class="btn-table-action" onclick="openEditEmployeeModal('${dni}')" title="Editar" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
-            <span class="material-symbols-rounded" style="font-size: 16px;">edit</span>
-            <span>Editar</span>
+          <button type="button" class="btn-table-action btn-admin-edit" data-dni="${escapeHtml(cleanDni)}" onclick="event.preventDefault(); openEditEmployeeModal('${escapeHtml(cleanDni)}');" title="Editar" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; cursor: pointer;">
+            <span class="material-symbols-rounded" style="font-size: 16px; pointer-events: none;">edit</span>
+            <span style="pointer-events: none;">Editar</span>
           </button>
-          <button class="btn-table-action" onclick="deleteEmployee('${dni}')" title="Eliminar" style="display: inline-flex; align-items: center; gap: 4px; color: #ff4d4d; border-color: #ff4d4d; white-space: nowrap;">
-            <span class="material-symbols-rounded" style="font-size: 16px;">delete</span>
-            <span>Eliminar</span>
+          <button type="button" class="btn-table-action btn-admin-delete" data-dni="${escapeHtml(cleanDni)}" onclick="event.preventDefault(); deleteEmployee('${escapeHtml(cleanDni)}');" title="Eliminar" style="display: inline-flex; align-items: center; gap: 4px; color: #ff4d4d; border-color: #ff4d4d; white-space: nowrap; cursor: pointer;">
+            <span class="material-symbols-rounded" style="font-size: 16px; pointer-events: none;">delete</span>
+            <span style="pointer-events: none;">Eliminar</span>
           </button>
         </div>
       </td>
     `;
     adminLiveTableBody.appendChild(tr);
   });
+  
+  // Attach event delegation on adminLiveTableBody
+  if (adminLiveTableBody) {
+    adminLiveTableBody.onclick = function(e) {
+      const btn = e.target.closest('.btn-table-action');
+      if (!btn) return;
+      e.preventDefault();
+      const dni = btn.getAttribute('data-dni');
+      if (!dni) return;
+
+      if (btn.classList.contains('btn-admin-logout')) {
+        forceLogoutEmployee(dni);
+      } else if (btn.classList.contains('btn-admin-edit')) {
+        openEditEmployeeModal(dni);
+      } else if (btn.classList.contains('btn-admin-delete')) {
+        deleteEmployee(dni);
+      }
+    };
+  }
   
   statActiveToday.textContent = activeToday;
   statInBreak.textContent = inBreak;
@@ -2051,10 +2110,21 @@ function updateAdminView() {
   updateReportEmployeeSelect();
 }
 
-window.forceLogoutEmployee = function(dni) {
+function forceLogoutEmployee(dni) {
+  logDebug(`[EJECUTANDO] Forzar Salida para DNI: ${dni}`);
+  const emp = findEmployeeByDni(dni);
+  if (!emp) {
+    logDebug(`[ERROR] No se encontró colaborador con DNI: ${dni}`, 'error');
+    showToast('error', 'Error', 'No se encontró el registro del colaborador.');
+    return;
+  }
+  const empName = emp.name;
+  const targetDni = String(emp.dni).replace(/'/g, '').trim();
+  logDebug(`[MODAL] Abriendo confirmación Forzar Salida para ${empName}`);
+
   showCustomConfirm({
     title: 'Forzar Salida',
-    message: `¿Estás seguro de que deseas forzar la salida de <strong>${employeesDatabase[dni].name}</strong>?<br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción registrará la salida del colaborador de forma inmediata.</span>`,
+    message: `¿Estás seguro de que deseas forzar la salida de <strong>${empName}</strong>?<br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción registrará la salida del colaborador de forma inmediata.</span>`,
     type: 'warning',
     acceptText: 'Forzar Salida'
   }).then((confirmed) => {
@@ -2071,27 +2141,32 @@ window.forceLogoutEmployee = function(dni) {
         details: "Forzado por Administrador"
       };
       
-      attendanceState[dni].action = 'Salida';
-      attendanceState[dni].timestamp = now.getTime();
-      attendanceState[dni].history.push(logItem);
+      if (!attendanceState[targetDni]) {
+        attendanceState[targetDni] = { action: 'Desconectado', timestamp: null, history: [] };
+      }
+      attendanceState[targetDni].action = 'Salida';
+      attendanceState[targetDni].timestamp = now.getTime();
+      if (!Array.isArray(attendanceState[targetDni].history)) {
+        attendanceState[targetDni].history = [];
+      }
+      attendanceState[targetDni].history.push(logItem);
       saveState();
       
       if (googleScriptUrl) {
-        sendAttendanceToGoogleSheets(dni, employeesDatabase[dni].name, 'Salida');
+        sendAttendanceToGoogleSheets(targetDni, empName, 'Salida');
       }
       
-      // CORREGIDO: MOCK_EMPLOYEES cambiado a employeesDatabase
-      showToast('warning', 'Salida Forzada', `Se forzó la salida de ${employeesDatabase[dni].name}`);
+      showToast('warning', 'Salida Forzada', `Se forzó la salida de ${empName}`);
       updateAdminView();
       
-      // If the active session is the forced logout, log out immediately
-      if (currentSession && currentSession.dni === dni) {
+      if (currentSession && String(currentSession.dni).replace(/'/g, '').trim() === targetDni) {
         currentSession = null;
         showView('login');
       }
     }
   });
-};
+}
+window.forceLogoutEmployee = forceLogoutEmployee;
 
 /* ==========================================================================
    TEST CONNECTION LÓGICA
@@ -2255,8 +2330,8 @@ function showCustomConfirm(options) {
     const btnAccept = document.getElementById('btn-confirm-accept');
     const btnCancel = document.getElementById('btn-confirm-cancel');
     
-    if (!modal) {
-      resolve(confirm(options.message.replace(/<[^>]*>/g, '')));
+    if (!modal || !btnAccept || !btnCancel) {
+      resolve(confirm(options.message ? options.message.replace(/<[^>]*>/g, '') : '¿Confirmar?'));
       return;
     }
     
@@ -2283,25 +2358,30 @@ function showCustomConfirm(options) {
       btnAccept.textContent = options.acceptText || 'Aceptar';
     }
     
+    // Replace nodes to strip previous click listeners
+    const newBtnAccept = btnAccept.cloneNode(true);
+    const newBtnCancel = btnCancel.cloneNode(true);
+    btnAccept.parentNode.replaceChild(newBtnAccept, btnAccept);
+    btnCancel.parentNode.replaceChild(newBtnCancel, btnCancel);
+
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
+    modal.style.zIndex = '10000';
     
-    const cleanup = () => {
+    const closeModal = () => {
       modal.classList.add('hidden');
       modal.style.display = 'none';
-      btnAccept.replaceWith(btnAccept.cloneNode(true));
-      btnCancel.replaceWith(btnCancel.cloneNode(true));
     };
     
-    document.getElementById('btn-confirm-accept').addEventListener('click', () => {
-      cleanup();
+    newBtnAccept.addEventListener('click', () => {
+      closeModal();
       resolve(true);
-    });
+    }, { once: true });
     
-    document.getElementById('btn-confirm-cancel').addEventListener('click', () => {
-      cleanup();
+    newBtnCancel.addEventListener('click', () => {
+      closeModal();
       resolve(false);
-    });
+    }, { once: true });
   });
 }
 
@@ -2461,8 +2541,12 @@ function autoClosePendingSessions() {
 }
 
 // Lógica para ELIMINAR a un empleado del sistema (Movida fuera de showToast)
-window.deleteEmployee = function(dni) {
-  const empName = employeesDatabase[dni].name;
+function deleteEmployee(dni) {
+  logDebug(`[EJECUTANDO] Eliminar Colaborador DNI: ${dni}`);
+  const emp = findEmployeeByDni(dni);
+  const targetDni = emp ? String(emp.dni).replace(/'/g, '').trim() : String(dni).replace(/'/g, '').trim();
+  const empName = emp ? emp.name : `Colaborador (${targetDni})`;
+  logDebug(`[MODAL] Abriendo confirmación Eliminar para ${empName}`);
   
   showCustomConfirm({
     title: 'Eliminar Colaborador',
@@ -2471,13 +2555,24 @@ window.deleteEmployee = function(dni) {
     acceptText: 'Eliminar'
   }).then((confirmed) => {
     if (confirmed) {
-      // 1. Borrar de la base de datos local
-      delete employeesDatabase[dni];
-      delete attendanceState[dni];
+      // 1. Borrar todas las variaciones de la clave de la base de datos local
+      Object.keys(employeesDatabase).forEach(k => {
+        if (String(k).replace(/'/g, '').trim() === targetDni) {
+          delete employeesDatabase[k];
+        }
+      });
+      Object.keys(attendanceState).forEach(k => {
+        if (String(k).replace(/'/g, '').trim() === targetDni) {
+          delete attendanceState[k];
+        }
+      });
       saveState();
       
-      // 2. Actualizar la vista del administrador
+      // 2. Actualizar las vistas del administrador
       updateAdminView();
+      if (typeof updateReportEmployeeSelect === 'function') {
+        updateReportEmployeeSelect();
+      }
       showToast('success', 'Personal Eliminado', `${empName} fue retirado del sistema.`);
       
       // 3. Enviar orden a Google Sheets para borrarlo de la pestaña "Personal"
@@ -2485,7 +2580,7 @@ window.deleteEmployee = function(dni) {
         const payload = {
           action: "Eliminar_Personal",
           apiKey: googleScriptApiKey,
-          employeeId: dni
+          employeeId: targetDni
         };
         
         fetch(getScriptUrlWithApiKey(), {
@@ -2493,11 +2588,20 @@ window.deleteEmployee = function(dni) {
           mode: 'no-cors',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
+        }).then(() => {
+          setTimeout(() => {
+            if (typeof syncEmployeesFromGoogleSheets === 'function') {
+              syncEmployeesFromGoogleSheets();
+            }
+          }, 1500);
+        }).catch(err => {
+          console.error("Error al eliminar colaborador:", err);
         });
       }
     }
   });
-};
+}
+window.deleteEmployee = deleteEmployee;
 
 /* ==========================================================================
    REPORTES POR AGENTE - LÓGICA DE TIEMPOS Y REPORTES
@@ -4366,50 +4470,58 @@ function setupAdminTabs() {
    EDITAR COLABORADORES - LÓGICA DEL MODAL
    ========================================================================== */
 
-window.openEditEmployeeModal = function(dni) {
+function openEditEmployeeModal(dni) {
+  logDebug(`[EJECUTANDO] Editar Colaborador DNI: ${dni}`);
   const modal = document.getElementById('modal-edit-employee');
-  const employee = employeesDatabase[dni];
-  if (!modal || !employee) return;
+  const employee = findEmployeeByDni(dni);
+  if (!modal || !employee) {
+    logDebug(`[ERROR] Modal no existe (${!!modal}) o colaborador no existe (${!!employee})`, 'error');
+    showToast('error', 'Error', 'No se pudo encontrar el colaborador para editar.');
+    return;
+  }
+  logDebug(`[MODAL] Desplegando modal de edición para ${employee.name}`);
+  const targetDni = String(employee.dni).replace(/'/g, '').trim();
 
-  document.getElementById('edit-dni-hidden').value = dni;
-  document.getElementById('edit-dni-display-input').value = dni;
-  document.getElementById('edit-name').value = employee.name;
-  document.getElementById('edit-role').value = employee.role;
-  document.getElementById('edit-pin').value = employee.pin || "1234";
+  const elHidden = document.getElementById('edit-dni-hidden');
+  const elDisplay = document.getElementById('edit-dni-display-input');
+  const elName = document.getElementById('edit-name');
+  const elRole = document.getElementById('edit-role');
+  const elPin = document.getElementById('edit-pin');
+
+  if (elHidden) elHidden.value = targetDni;
+  if (elDisplay) elDisplay.value = targetDni;
+  if (elName) elName.value = employee.name || '';
+  if (elRole) elRole.value = employee.role || 'Colaborador';
+  if (elPin) elPin.value = employee.pin || "1234";
+
   const isFlexible = (employee.workStart === "—" || employee.weeklySchedule === "flexible");
   const editScheduleType = document.getElementById('edit-schedule-type');
   const editScheduleContainer = document.getElementById('edit-schedule-details-container');
-  
+  const elWStart = document.getElementById('edit-work-start');
+  const elWEnd = document.getElementById('edit-work-end');
+  const elBStart = document.getElementById('edit-break-start');
+  const elBEnd = document.getElementById('edit-break-end');
+
   if (editScheduleType) {
     editScheduleType.value = isFlexible ? 'flexible' : 'fixed';
     if (isFlexible) {
       if (editScheduleContainer) editScheduleContainer.classList.add('hidden');
-      document.getElementById('edit-work-start').removeAttribute('required');
-      document.getElementById('edit-work-end').removeAttribute('required');
-      document.getElementById('edit-break-start').removeAttribute('required');
-      document.getElementById('edit-break-end').removeAttribute('required');
-      
-      document.getElementById('edit-work-start').value = "08:00";
-      document.getElementById('edit-work-end').value = "17:00";
-      document.getElementById('edit-break-start').value = "13:00";
-      document.getElementById('edit-break-end').value = "14:00";
+      if (elWStart) { elWStart.removeAttribute('required'); elWStart.value = "08:00"; }
+      if (elWEnd) { elWEnd.removeAttribute('required'); elWEnd.value = "17:00"; }
+      if (elBStart) { elBStart.removeAttribute('required'); elBStart.value = "13:00"; }
+      if (elBEnd) { elBEnd.removeAttribute('required'); elBEnd.value = "14:00"; }
     } else {
       if (editScheduleContainer) editScheduleContainer.classList.remove('hidden');
-      document.getElementById('edit-work-start').setAttribute('required', 'required');
-      document.getElementById('edit-work-end').setAttribute('required', 'required');
-      document.getElementById('edit-break-start').setAttribute('required', 'required');
-      document.getElementById('edit-break-end').setAttribute('required', 'required');
-      
-      document.getElementById('edit-work-start').value = employee.workStart || "08:00";
-      document.getElementById('edit-work-end').value = employee.workEnd || "17:00";
-      document.getElementById('edit-break-start').value = employee.breakStart || "13:00";
-      document.getElementById('edit-break-end').value = employee.breakEnd || "14:00";
+      if (elWStart) { elWStart.setAttribute('required', 'required'); elWStart.value = employee.workStart || "08:00"; }
+      if (elWEnd) { elWEnd.setAttribute('required', 'required'); elWEnd.value = employee.workEnd || "17:00"; }
+      if (elBStart) { elBStart.setAttribute('required', 'required'); elBStart.value = employee.breakStart || "13:00"; }
+      if (elBEnd) { elBEnd.setAttribute('required', 'required'); elBEnd.value = employee.breakEnd || "14:00"; }
     }
   } else {
-    document.getElementById('edit-work-start').value = employee.workStart || "08:00";
-    document.getElementById('edit-work-end').value = employee.workEnd || "17:00";
-    document.getElementById('edit-break-start').value = employee.breakStart || "13:00";
-    document.getElementById('edit-break-end').value = employee.breakEnd || "14:00";
+    if (elWStart) elWStart.value = employee.workStart || "08:00";
+    if (elWEnd) elWEnd.value = employee.workEnd || "17:00";
+    if (elBStart) elBStart.value = employee.breakStart || "13:00";
+    if (elBEnd) elBEnd.value = employee.breakEnd || "14:00";
   }
 
   // Cargar weeklySchedule del colaborador
@@ -4457,7 +4569,10 @@ window.openEditEmployeeModal = function(dni) {
   });
 
   modal.classList.remove('hidden');
-};
+  modal.style.display = 'flex';
+  modal.style.zIndex = '10000';
+}
+window.openEditEmployeeModal = openEditEmployeeModal;
 
 function setupEditModalListeners() {
   const modal = document.getElementById('modal-edit-employee');
@@ -4466,13 +4581,23 @@ function setupEditModalListeners() {
 
   if (!modal) return;
 
-  cancelBtn.addEventListener('click', () => {
-    modal.classList.add('hidden');
-  });
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    });
+  }
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const dni = document.getElementById('edit-dni-hidden').value;
+    const rawDni = document.getElementById('edit-dni-hidden').value;
+    const emp = findEmployeeByDni(rawDni);
+    if (!emp) {
+      logDebug(`[ERROR] Intento de guardar colaborador no existente: ${rawDni}`, 'error');
+      showToast('error', 'Error', 'El colaborador no existe.');
+      return;
+    }
+    const dni = emp.dni;
     const name = document.getElementById('edit-name').value.trim().toUpperCase();
     const role = document.getElementById('edit-role').value.trim();
     const pin = document.getElementById('edit-pin').value.trim();
@@ -4480,11 +4605,6 @@ function setupEditModalListeners() {
     const workEnd = document.getElementById('edit-work-end').value;
     const breakStart = document.getElementById('edit-break-start').value;
     const breakEnd = document.getElementById('edit-break-end').value;
-
-    if (!employeesDatabase[dni]) {
-      showToast('error', 'Error', 'El colaborador no existe.');
-      return;
-    }
 
     // Leer distribución semanal del acordeón de edición
     const weeklySchedule = {};
@@ -4528,6 +4648,7 @@ function setupEditModalListeners() {
       sendUpdateToGoogleSheets(dni, name, role, finalWorkStart, finalWorkEnd, finalBreakStart, finalBreakEnd, pin, finalWeeklySchedule);
     }
     modal.classList.add('hidden');
+    modal.style.display = 'none';
     showToast('success', 'Colaborador Actualizado', `Los datos y horarios de ${name} fueron guardados.`);
     
     updateAdminView();
@@ -6205,7 +6326,7 @@ function deleteJustificacion(dni, dateStr) {
         date: dateStr
       };
 
-      justificacionesDatabase = justificacionesDatabase.filter(j => !(j.dni === dni && j.dateStr === dateStr));
+      justificacionesDatabase = justificacionesDatabase.filter(j => !(String(j.dni).trim() === String(dni).trim() && j.dateStr === dateStr));
       safeSetItem('justificaciones_db', JSON.stringify(justificacionesDatabase));
       renderJustificacionesTable();
 
@@ -6219,7 +6340,9 @@ function deleteJustificacion(dni, dateStr) {
         })
         .then(() => {
           showToast('success', 'Eliminado', 'Justificación eliminada de Google Sheets.');
-          syncJustificacionesFromGoogleSheets();
+          setTimeout(() => {
+            syncJustificacionesFromGoogleSheets();
+          }, 1500);
         })
         .catch(err => {
           console.error("Error al eliminar justificación:", err);
@@ -6318,7 +6441,9 @@ function deleteFeriado(dateStr) {
         })
         .then(() => {
           showToast('success', 'Eliminado', 'Feriado eliminado de Google Sheets.');
-          syncFeriadosFromGoogleSheets();
+          setTimeout(() => {
+            syncFeriadosFromGoogleSheets();
+          }, 1500);
         })
         .catch(err => {
           console.error("Error al eliminar feriado:", err);
