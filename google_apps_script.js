@@ -96,9 +96,32 @@ function formatLongTimeValue(val) {
   return String(val).trim();
 }
 
+var DEFAULT_API_KEY = "AsistenciaPro_SecuredKey_2026";
+
+function getStoredApiKey() {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty("API_KEY");
+  return (key && key.trim() !== "") ? key.trim() : DEFAULT_API_KEY;
+}
+
+function checkAuth(e, postData) {
+  var providedKey = "";
+  if (e && e.parameter && e.parameter.apiKey) {
+    providedKey = String(e.parameter.apiKey).trim();
+  } else if (postData && postData.apiKey) {
+    providedKey = String(postData.apiKey).trim();
+  }
+  return providedKey === getStoredApiKey();
+}
+
 // ── GET REQUESTS (Sincronización hacia la App Web) ────────────────────────
 function doGet(e) {
   ensureSheetsExist();
+  
+  if (!checkAuth(e, null)) {
+    return getJsonResponse({ status: "error", message: "Acceso denegado: API Key no válida o no proporcionada." });
+  }
+
   var action = e.parameter.action;
   
   if (!action) {
@@ -121,7 +144,8 @@ function doGet(e) {
           config: {
             security_block_mobile: props.getProperty('security_block_mobile') === 'true',
             security_restrict_pcs: props.getProperty('security_restrict_pcs') === 'true',
-            tardiness_tolerance: props.getProperty('tardiness_tolerance') ? parseInt(props.getProperty('tardiness_tolerance'), 10) : 5
+            tardiness_tolerance: props.getProperty('tardiness_tolerance') ? parseInt(props.getProperty('tardiness_tolerance'), 10) : 5,
+            api_key: getStoredApiKey()
           }
         }
       });
@@ -161,6 +185,11 @@ function doPost(e) {
   
   try {
     var postData = JSON.parse(e.postData.contents);
+    
+    if (!checkAuth(e, postData)) {
+      return getJsonResponse({ status: "error", message: "Acceso denegado: API Key no válida o no proporcionada." });
+    }
+
     var action = postData.action;
     
     if (!action) {
@@ -180,6 +209,9 @@ function doPost(e) {
       }
       if (postData.tardiness_tolerance !== undefined) {
         props.setProperty('tardiness_tolerance', String(postData.tardiness_tolerance));
+      }
+      if (postData.api_key !== undefined && String(postData.api_key).trim() !== "") {
+        props.setProperty('API_KEY', String(postData.api_key).trim());
       }
       return getJsonResponse({ status: "ok", message: "Configuración global de seguridad guardada." });
     }

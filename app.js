@@ -46,8 +46,28 @@ let autoSyncInterval = null;
 const AUTO_SYNC_ADMIN_MS  = 60000;  // Panel Admin: cada 60 segundos
 const AUTO_SYNC_AGENT_MS  = 45000;  // Vista Agente: cada 45 segundos
 let isSyncing = false;              // Bandera para evitar peticiones solapadas
+let googleScriptUrl = "https://script.google.com/macros/s/AKfycbzLHcHRoe56PJ_0XWsv2V36YuCqdEqGhp2GBjE8PFTbIHWq-dmxTFeCtuPt7-muBM8/exec";
+let googleScriptApiKey = "AsistenciaPro_SecuredKey_2026";
 
-let googleScriptUrl = "https://script.google.com/macros/s/AKfycbxh-EejSNaokvwz44x-HPemalHWKtnPsq51l4u8YJ1hOZgPJK6LvORA_YpzCoL8lHpKFg/exec";
+function getScriptUrlWithApiKey(action = '') {
+  if (!googleScriptUrl) return '';
+  const delimiter = googleScriptUrl.includes('?') ? '&' : '?';
+  let url = `${googleScriptUrl}${delimiter}apiKey=${encodeURIComponent(googleScriptApiKey)}`;
+  if (action) {
+    url += `&action=${encodeURIComponent(action)}`;
+  }
+  return url;
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 let tardinessTolerance = 5; 
 let cachedAgentHistory = [];
 let cachedConsolidatedHistory = []; 
@@ -236,6 +256,13 @@ function loadLocalStorage() {
     const testBtn = document.getElementById('btn-test-connection');
     if (testBtn) testBtn.disabled = false;
   }
+
+  const savedApiKey = localStorage.getItem('google_script_api_key');
+  if (savedApiKey && savedApiKey.trim() !== '') {
+    googleScriptApiKey = savedApiKey.trim();
+  }
+  const apiKeyInput = document.getElementById('input-api-key');
+  if (apiKeyInput) apiKeyInput.value = googleScriptApiKey;
 
   // Cargar tolerancia de tardanza
   const savedTolerance = localStorage.getItem('tardiness_tolerance');
@@ -466,7 +493,7 @@ function setupDashboardView() {
       }
     }, 4000);
 
-    fetch(`${googleScriptUrl}?action=get_history&dni=${currentSession.dni}`)
+    fetch(`${getScriptUrlWithApiKey('get_history')}&dni=${encodeURIComponent(currentSession.dni)}`)
       .then(res => res.json())
       .then(res => {
         if (resolved) return;
@@ -762,6 +789,7 @@ function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart,
   
   const payload = {
     action: "Registrar_Personal", // Acción específica para que tu Sheet sepa qué hacer
+    apiKey: googleScriptApiKey,
     employeeId: dni,
     employeeName: name,
     age: age,
@@ -775,7 +803,7 @@ function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart,
     weeklySchedule: typeof weeklySchedule === 'object' ? JSON.stringify(weeklySchedule) : weeklySchedule
   };
   
-  fetch(googleScriptUrl, {
+  fetch(getScriptUrlWithApiKey(), {
     method: 'POST',
     mode: 'no-cors',
     headers: {
@@ -805,6 +833,7 @@ function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStar
   
   const payload = {
     action: "Editar_Personal",
+    apiKey: googleScriptApiKey,
     employeeId: dni,
     employeeName: name,
     age: age,
@@ -818,7 +847,7 @@ function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStar
     weeklySchedule: typeof weeklySchedule === 'object' ? JSON.stringify(weeklySchedule) : weeklySchedule
   };
   
-  fetch(googleScriptUrl, {
+  fetch(getScriptUrlWithApiKey(), {
     method: 'POST',
     mode: 'no-cors',
     headers: {
@@ -839,7 +868,7 @@ function sendUpdateToGoogleSheets(dni, name, role, workStart, workEnd, breakStar
 function syncEmployeesFromGoogleSheets() {
   if (!googleScriptUrl) return Promise.resolve();
   
-  return fetch(`${googleScriptUrl}?action=get_employees`)
+  return fetch(getScriptUrlWithApiKey('get_employees'))
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
@@ -976,7 +1005,7 @@ function startAutoSync(mode) {
     if (mode === 'agent' && currentSession) {
       const fetchStartTime = Date.now();
       // MODO AGENTE: solo trae el historial del agente logueado (liviano)
-      fetch(`${googleScriptUrl}?action=get_history&dni=${currentSession.dni}`)
+      fetch(`${getScriptUrlWithApiKey('get_history')}&dni=${encodeURIComponent(currentSession.dni)}`)
         .then(res => res.json())
         .then(res => {
           handleHistoryFetchResponse(res, fetchStartTime);
@@ -1029,7 +1058,7 @@ function syncInitialData() {
   console.log("Iniciando sincronización unificada...");
   updateCloudStatus('syncing');
   
-  return fetch(`${googleScriptUrl}?action=get_initial_data`)
+  return fetch(getScriptUrlWithApiKey('get_initial_data'))
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && res.data) {
@@ -1385,6 +1414,12 @@ function setupEventListeners() {
       return;
     }
 
+    const apiKeyInput = document.getElementById('input-api-key');
+    if (apiKeyInput && apiKeyInput.value.trim() !== '') {
+      googleScriptApiKey = apiKeyInput.value.trim();
+      safeSetItem('google_script_api_key', googleScriptApiKey);
+    }
+
     // Guardar configuraciones de seguridad
     const chkMobile = document.getElementById('chk-block-mobile');
     const chkPcs = document.getElementById('chk-restrict-pcs');
@@ -1405,15 +1440,17 @@ function setupEventListeners() {
 
     // Sincronizar configuración global a Google Sheets si hay URL configurada
     if (googleScriptUrl) {
-      fetch(googleScriptUrl, {
+      fetch(getScriptUrlWithApiKey(), {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'Guardar_Configuracion',
+          apiKey: googleScriptApiKey,
           security_block_mobile: securityBlockMobile,
           security_restrict_pcs: securityRestrictPcs,
-          tardiness_tolerance: tardinessTolerance
+          tardiness_tolerance: tardinessTolerance,
+          api_key: googleScriptApiKey
         })
       }).catch(err => console.error('Error sincronizando configuración global:', err));
     }
@@ -1794,6 +1831,7 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, s
   
   const payload = {
     action: action,
+    apiKey: googleScriptApiKey,
     employeeId: dni,
     employeeName: name,
     details: "Registrado vía AsistenciaPro Web",
@@ -1808,7 +1846,7 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, s
     payload.device = "Sistema";
   }
   
-  fetch(googleScriptUrl, {
+  fetch(getScriptUrlWithApiKey(), {
     method: 'POST',
     mode: 'no-cors',
     headers: {
@@ -2067,12 +2105,13 @@ function testGoogleScriptConnection() {
   
   const payload = {
     action: "login",
+    apiKey: googleScriptApiKey,
     employeeId: "73507283",
     pin: "1234"
   };
   
   // We make a simple POST login fetch to test connection
-  fetch(googleScriptUrl, {
+  fetch(getScriptUrlWithApiKey(), {
     method: 'POST',
     mode: 'no-cors', // with no-cors we can send, but cannot read the body response. It will fulfill the promise successfully if the server receives and completes.
     headers: {
@@ -2445,10 +2484,11 @@ window.deleteEmployee = function(dni) {
       if (googleScriptUrl) {
         const payload = {
           action: "Eliminar_Personal",
+          apiKey: googleScriptApiKey,
           employeeId: dni
         };
         
-        fetch(googleScriptUrl, {
+        fetch(getScriptUrlWithApiKey(), {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'application/json' },
@@ -3599,7 +3639,7 @@ function renderReportTable(history, employee) {
 // --- Lógica del Reporte Consolidado (Resumen General) ---
 
 function fetchAllHistoryFromGoogleSheets() {
-  return fetch(`${googleScriptUrl}?action=get_history`)
+  return fetch(getScriptUrlWithApiKey('get_history'))
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
@@ -3611,7 +3651,7 @@ function fetchAllHistoryFromGoogleSheets() {
       console.warn("Fallo en get_history global. Intentando carga paralela...", err);
       const dniList = Object.keys(employeesDatabase);
       const promises = dniList.map(dni => 
-        fetch(`${googleScriptUrl}?action=get_history&dni=${dni}`)
+        fetch(`${getScriptUrlWithApiKey('get_history')}&dni=${encodeURIComponent(dni)}`)
           .then(res => res.json())
           .then(res => {
             if (res.status === "ok" && Array.isArray(res.data)) {
@@ -5941,7 +5981,7 @@ function exportMonthlyExcel() {
 
 function syncJustificacionesFromGoogleSheets() {
   if (!googleScriptUrl) return Promise.resolve();
-  return fetch(`${googleScriptUrl}?action=get_justificaciones`)
+  return fetch(getScriptUrlWithApiKey('get_justificaciones'))
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
@@ -5956,7 +5996,7 @@ function syncJustificacionesFromGoogleSheets() {
 
 function syncFeriadosFromGoogleSheets() {
   if (!googleScriptUrl) return Promise.resolve();
-  return fetch(`${googleScriptUrl}?action=get_feriados`)
+  return fetch(getScriptUrlWithApiKey('get_feriados'))
     .then(res => res.json())
     .then(res => {
       if (res.status === "ok" && Array.isArray(res.data)) {
@@ -6114,6 +6154,7 @@ function renderFeriadosTable() {
 function registerJustificacion(dni, dateStr, type, details, startTime = '', endTime = '', compensation = '') {
   const payload = {
     action: "Registrar_Justificacion",
+    apiKey: googleScriptApiKey,
     employeeId: dni,
     date: dateStr,
     type: type,
@@ -6130,7 +6171,7 @@ function registerJustificacion(dni, dateStr, type, details, startTime = '', endT
 
   if (googleScriptUrl) {
     showToast('info', 'Guardando...', 'Sincronizando justificación con Google Sheets.');
-    fetch(googleScriptUrl, {
+    fetch(getScriptUrlWithApiKey(), {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "application/json" },
@@ -6159,6 +6200,7 @@ function deleteJustificacion(dni, dateStr) {
     if (confirmed) {
       const payload = {
         action: "Eliminar_Justificacion",
+        apiKey: googleScriptApiKey,
         employeeId: dni,
         date: dateStr
       };
@@ -6169,7 +6211,7 @@ function deleteJustificacion(dni, dateStr) {
 
       if (googleScriptUrl) {
         showToast('info', 'Eliminando...', 'Sincronizando eliminación con Google Sheets.');
-        fetch(googleScriptUrl, {
+        fetch(getScriptUrlWithApiKey(), {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "application/json" },
@@ -6193,6 +6235,7 @@ function deleteJustificacion(dni, dateStr) {
 function registerFeriado(dateStr, name) {
   const payload = {
     action: "Registrar_Feriado",
+    apiKey: googleScriptApiKey,
     date: dateStr,
     name: name
   };
@@ -6228,7 +6271,7 @@ function registerFeriado(dateStr, name) {
 
   if (googleScriptUrl) {
     showToast('info', 'Guardando...', 'Sincronizando feriado con Google Sheets.');
-    fetch(googleScriptUrl, {
+    fetch(getScriptUrlWithApiKey(), {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "application/json" },
@@ -6257,6 +6300,7 @@ function deleteFeriado(dateStr) {
     if (confirmed) {
       const payload = {
         action: "Eliminar_Feriado",
+        apiKey: googleScriptApiKey,
         date: dateStr
       };
 
@@ -6266,7 +6310,7 @@ function deleteFeriado(dateStr) {
 
       if (googleScriptUrl) {
         showToast('info', 'Eliminando...', 'Sincronizando eliminación con Google Sheets.');
-        fetch(googleScriptUrl, {
+        fetch(getScriptUrlWithApiKey(), {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "application/json" },
@@ -6892,15 +6936,17 @@ function loadSecuritySettings() {
         safeSetItem('security_block_mobile', securityBlockMobile);
         
         if (googleScriptUrl) {
-          fetch(googleScriptUrl, {
+          fetch(getScriptUrlWithApiKey(), {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'Guardar_Configuracion',
+              apiKey: googleScriptApiKey,
               security_block_mobile: securityBlockMobile,
               security_restrict_pcs: securityRestrictPcs,
-              tardiness_tolerance: tardinessTolerance
+              tardiness_tolerance: tardinessTolerance,
+              api_key: googleScriptApiKey
             })
           }).catch(err => console.error('Error sincronizando bloqueo móvil:', err));
         }
@@ -6929,15 +6975,17 @@ function loadSecuritySettings() {
         }
 
         if (googleScriptUrl) {
-          fetch(googleScriptUrl, {
+          fetch(getScriptUrlWithApiKey(), {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'Guardar_Configuracion',
+              apiKey: googleScriptApiKey,
               security_block_mobile: securityBlockMobile,
               security_restrict_pcs: securityRestrictPcs,
-              tardiness_tolerance: tardinessTolerance
+              tardiness_tolerance: tardinessTolerance,
+              api_key: googleScriptApiKey
             })
           }).catch(err => console.error('Error sincronizando restricción de PCs:', err));
         }
