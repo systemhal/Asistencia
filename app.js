@@ -46,7 +46,7 @@ let autoSyncInterval = null;
 const AUTO_SYNC_ADMIN_MS  = 60000;  // Panel Admin: cada 60 segundos
 const AUTO_SYNC_AGENT_MS  = 45000;  // Vista Agente: cada 45 segundos
 let isSyncing = false;              // Bandera para evitar peticiones solapadas
-let googleScriptUrl = "https://script.google.com/macros/s/AKfycbzLHcHRoe56PJ_0XWsv2V36YuCqdEqGhp2GBjE8PFTbIHWq-dmxTFeCtuPt7-muBM8/exec";
+let googleScriptUrl = "https://script.google.com/macros/s/AKfycbxh-EejSNaokvwz44x-HPemalHWKtnPsq51l4u8YJ1hOZgPJK6LvORA_YpzCoL8lHpKFg/exec";
 let googleScriptApiKey = "AsistenciaPro_SecuredKey_2026";
 
 function getScriptUrlWithApiKey(action = '') {
