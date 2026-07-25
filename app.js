@@ -2230,92 +2230,111 @@ function showView(viewId) {
    ADMIN TABS SWITCHER ENGINE
    ========================================================================== */
 
-function setupAdminTabs() {
+function switchAdminTab(targetTab) {
+  if (!targetTab) return;
+
   const tabButtons = document.querySelectorAll('.btn-admin-tab');
   const tabContents = document.querySelectorAll('.admin-tab-content');
 
+  // Desactivar todos los botones y pestañas
+  tabButtons.forEach(b => {
+    if (b.getAttribute('data-tab') === targetTab) {
+      b.classList.add('active');
+    } else {
+      b.classList.remove('active');
+    }
+  });
+
+  tabContents.forEach(c => {
+    if (c.id === `tab-${targetTab}-content`) {
+      c.classList.remove('hidden');
+      c.classList.add('active');
+    } else {
+      c.classList.remove('active');
+      c.classList.add('hidden');
+    }
+  });
+
+  // Actualizar el título principal de la barra superior dinámicamente
+  const pageTitleEl = document.querySelector('.admin-page-title');
+  if (pageTitleEl) {
+    const titleMap = {
+      'live': 'Panel de Monitoreo General',
+      'daily': 'Resumen Diario de Asistencia',
+      'consolidated': 'Resumen General Consolidado',
+      'monthly': 'Resumen y Récord Mensual',
+      'reports': 'Reportes Detallados por Agente',
+      'gerencial': 'Vista y Métricas Gerenciales',
+      'validations': 'Control de Validaciones y Sanciones de Asistencia',
+      'register': 'Gestión de Personal y Configuración'
+    };
+    pageTitleEl.textContent = titleMap[targetTab] || 'Panel de Administración';
+  }
+
+  // Lógica/renderizado dinámico según la pestaña seleccionada
+  if (targetTab === 'reports') {
+    if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
+    const select = document.getElementById('select-report-employee');
+    if (select && select.value && typeof renderAgentReport === 'function') {
+      renderAgentReport(select.value);
+    }
+  } else if (targetTab === 'register') {
+    if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
+    if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
+    if (typeof renderJustificacionesTable === 'function') renderJustificacionesTable();
+    if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
+    if (typeof syncJustificacionesFromGoogleSheets === 'function') syncJustificacionesFromGoogleSheets();
+    if (typeof syncFeriadosFromGoogleSheets === 'function') syncFeriadosFromGoogleSheets();
+  } else if (targetTab === 'consolidated') {
+    if (typeof loadConsolidatedReport === 'function') loadConsolidatedReport();
+  } else if (targetTab === 'daily') {
+    const dateInput = document.getElementById('daily-select-date');
+    if (dateInput && !dateInput.value) {
+      const now = new Date();
+      const dayStr = String(now.getDate()).padStart(2, '0');
+      const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+      dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
+    }
+    if (typeof loadDailySummaryReport === 'function') loadDailySummaryReport();
+    if (typeof renderDailySummaryTable === 'function') renderDailySummaryTable();
+  } else if (targetTab === 'monthly') {
+    const monthInput = document.getElementById('monthly-select-month');
+    if (monthInput && !monthInput.value) {
+      const now = new Date();
+      const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+      monthInput.value = `${now.getFullYear()}-${monthStr}`;
+    }
+    if (typeof loadMonthlyReport === 'function') loadMonthlyReport();
+    if (typeof renderMonthlyReport === 'function') renderMonthlyReport();
+  } else if (targetTab === 'gerencial') {
+    if (typeof loadGerencialReport === 'function') loadGerencialReport();
+    if (typeof renderGerencialView === 'function') renderGerencialView();
+  } else if (targetTab === 'validations') {
+    if (typeof renderValidationsView === 'function') renderValidationsView();
+  } else if (targetTab === 'live') {
+    if (typeof updateAdminView === 'function') updateAdminView();
+  }
+}
+
+window.switchAdminTab = switchAdminTab;
+
+function setupAdminTabs() {
+  const tabButtons = document.querySelectorAll('.btn-admin-tab');
   tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
       const targetTab = btn.getAttribute('data-tab');
-      if (!targetTab) return;
-
-      // Desactivar todos los botones y pestañas
-      tabButtons.forEach(b => b.classList.remove('active'));
-      tabContents.forEach(c => {
-        c.classList.remove('active');
-        c.classList.add('hidden');
-      });
-
-      // Activar el botón presionado
-      btn.classList.add('active');
-
-      // Activar el contenido de la pestaña correspondiente
-      const activeContent = document.getElementById(`tab-${targetTab}-content`);
-      if (activeContent) {
-        activeContent.classList.remove('hidden');
-        activeContent.classList.add('active');
-      }
-
-      // Actualizar el título principal de la barra superior dinámicamente
-      const pageTitleEl = document.querySelector('.admin-page-title');
-      if (pageTitleEl) {
-        const titleMap = {
-          'live': 'Panel de Monitoreo General',
-          'daily': 'Resumen Diario de Asistencia',
-          'consolidated': 'Resumen General Consolidado',
-          'monthly': 'Resumen y Récord Mensual',
-          'reports': 'Reportes Detallados por Agente',
-          'gerencial': 'Vista y Métricas Gerenciales',
-          'validations': 'Control de Validaciones y Sanciones de Asistencia',
-          'register': 'Gestión de Personal y Configuración'
-        };
-        pageTitleEl.textContent = titleMap[targetTab] || 'Panel de Administración';
-      }
-
-      // Lógica/renderizado dinámico según la pestaña seleccionada
-      if (targetTab === 'reports') {
-        if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
-        const select = document.getElementById('select-report-employee');
-        if (select && select.value && typeof renderAgentReport === 'function') {
-          renderAgentReport(select.value);
-        }
-      } else if (targetTab === 'register') {
-        if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
-        if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
-        if (typeof renderJustificacionesTable === 'function') renderJustificacionesTable();
-        if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
-        if (typeof syncJustificacionesFromGoogleSheets === 'function') syncJustificacionesFromGoogleSheets();
-        if (typeof syncFeriadosFromGoogleSheets === 'function') syncFeriadosFromGoogleSheets();
-      } else if (targetTab === 'consolidated') {
-        if (typeof loadConsolidatedReport === 'function') loadConsolidatedReport();
-      } else if (targetTab === 'daily') {
-        const dateInput = document.getElementById('daily-select-date');
-        if (dateInput && !dateInput.value) {
-          const now = new Date();
-          const dayStr = String(now.getDate()).padStart(2, '0');
-          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-          dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
-        }
-        if (typeof loadDailySummaryReport === 'function') loadDailySummaryReport();
-        if (typeof renderDailySummaryTable === 'function') renderDailySummaryTable();
-      } else if (targetTab === 'monthly') {
-        const monthInput = document.getElementById('monthly-select-month');
-        if (monthInput && !monthInput.value) {
-          const now = new Date();
-          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-          monthInput.value = `${now.getFullYear()}-${monthStr}`;
-        }
-        if (typeof loadMonthlyReport === 'function') loadMonthlyReport();
-        if (typeof renderMonthlyReport === 'function') renderMonthlyReport();
-      } else if (targetTab === 'gerencial') {
-        if (typeof loadGerencialReport === 'function') loadGerencialReport();
-        if (typeof renderGerencialView === 'function') renderGerencialView();
-      } else if (targetTab === 'validations') {
-        if (typeof renderValidationsView === 'function') renderValidationsView();
-      } else if (targetTab === 'live') {
-        if (typeof updateAdminView === 'function') updateAdminView();
-      }
+      if (targetTab) switchAdminTab(targetTab);
     });
+  });
+
+  // Delegación global de eventos para evitar fallos de DOM o timing
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-admin-tab');
+    if (btn) {
+      const targetTab = btn.getAttribute('data-tab');
+      if (targetTab) switchAdminTab(targetTab);
+    }
   });
 }
 

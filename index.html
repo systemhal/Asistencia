@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260724_16">
+  <link rel="stylesheet" href="styles.css?v=20260724_18">
 </head>
 <body>
 
@@ -260,35 +260,35 @@
           <div class="admin-sidebar-nav-container">
             <span class="sidebar-nav-title">Navegación</span>
             <nav class="admin-tabs-nav vertical">
-              <button class="btn-admin-tab active" data-tab="live">
+              <button type="button" class="btn-admin-tab active" data-tab="live" onclick="switchAdminTab('live')">
                 <span class="material-symbols-rounded">sensors</span>
                 <span>Monitoreo en Vivo</span>
               </button>
-              <button class="btn-admin-tab" data-tab="daily">
+              <button type="button" class="btn-admin-tab" data-tab="daily" onclick="switchAdminTab('daily')">
                 <span class="material-symbols-rounded">calendar_today</span>
                 <span>Resumen Diario</span>
               </button>
-              <button class="btn-admin-tab" data-tab="consolidated">
+              <button type="button" class="btn-admin-tab" data-tab="consolidated" onclick="switchAdminTab('consolidated')">
                 <span class="material-symbols-rounded">table_chart</span>
                 <span>Resumen General</span>
               </button>
-              <button class="btn-admin-tab" data-tab="monthly">
+              <button type="button" class="btn-admin-tab" data-tab="monthly" onclick="switchAdminTab('monthly')">
                 <span class="material-symbols-rounded">calendar_month</span>
                 <span>Resumen Mensual</span>
               </button>
-              <button class="btn-admin-tab" data-tab="reports">
+              <button type="button" class="btn-admin-tab" data-tab="reports" onclick="switchAdminTab('reports')">
                 <span class="material-symbols-rounded">analytics</span>
                 <span>Reportes por Agente</span>
               </button>
-              <button class="btn-admin-tab" data-tab="gerencial">
+              <button type="button" class="btn-admin-tab" data-tab="gerencial" onclick="switchAdminTab('gerencial')">
                 <span class="material-symbols-rounded">leaderboard</span>
                 <span>Vista Gerencial</span>
               </button>
-              <button class="btn-admin-tab" data-tab="validations">
+              <button type="button" class="btn-admin-tab" data-tab="validations" onclick="switchAdminTab('validations')">
                 <span class="material-symbols-rounded">gavel</span>
                 <span>Validaciones y Sanciones</span>
               </button>
-              <button class="btn-admin-tab" data-tab="register">
+              <button type="button" class="btn-admin-tab" data-tab="register" onclick="switchAdminTab('register')">
                 <span class="material-symbols-rounded">settings</span>
                 <span>Gestión y Configuración</span>
               </button>
@@ -1997,6 +1997,6 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <!-- Script Principal de la Aplicación -->
-  <script src="app.js?v=20260724_17"></script>
+  <script src="app.js?v=20260724_18"></script>
 </body>
 </html>
