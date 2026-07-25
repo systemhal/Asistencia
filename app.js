@@ -2272,24 +2272,48 @@ function setupAdminTabs() {
         pageTitleEl.textContent = titleMap[targetTab] || 'Panel de Administración';
       }
 
-      // Ejecutar renderizado específico de la pestaña seleccionada
-      if (targetTab === 'daily') {
-        if (typeof renderDailySummaryTable === 'function') renderDailySummaryTable();
+      // Lógica/renderizado dinámico según la pestaña seleccionada
+      if (targetTab === 'reports') {
+        if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
+        const select = document.getElementById('select-report-employee');
+        if (select && select.value && typeof renderAgentReport === 'function') {
+          renderAgentReport(select.value);
+        }
+      } else if (targetTab === 'register') {
+        if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
+        if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
+        if (typeof renderJustificacionesTable === 'function') renderJustificacionesTable();
+        if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
+        if (typeof syncJustificacionesFromGoogleSheets === 'function') syncJustificacionesFromGoogleSheets();
+        if (typeof syncFeriadosFromGoogleSheets === 'function') syncFeriadosFromGoogleSheets();
       } else if (targetTab === 'consolidated') {
         if (typeof loadConsolidatedReport === 'function') loadConsolidatedReport();
+      } else if (targetTab === 'daily') {
+        const dateInput = document.getElementById('daily-select-date');
+        if (dateInput && !dateInput.value) {
+          const now = new Date();
+          const dayStr = String(now.getDate()).padStart(2, '0');
+          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+          dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
+        }
+        if (typeof loadDailySummaryReport === 'function') loadDailySummaryReport();
+        if (typeof renderDailySummaryTable === 'function') renderDailySummaryTable();
       } else if (targetTab === 'monthly') {
+        const monthInput = document.getElementById('monthly-select-month');
+        if (monthInput && !monthInput.value) {
+          const now = new Date();
+          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+          monthInput.value = `${now.getFullYear()}-${monthStr}`;
+        }
+        if (typeof loadMonthlyReport === 'function') loadMonthlyReport();
         if (typeof renderMonthlyReport === 'function') renderMonthlyReport();
-      } else if (targetTab === 'reports') {
-        const select = document.getElementById('select-report-employee');
-        if (select && select.value && typeof renderAgentReport === 'function') renderAgentReport(select.value);
       } else if (targetTab === 'gerencial') {
+        if (typeof loadGerencialReport === 'function') loadGerencialReport();
         if (typeof renderGerencialView === 'function') renderGerencialView();
       } else if (targetTab === 'validations') {
         if (typeof renderValidationsView === 'function') renderValidationsView();
-      } else if (targetTab === 'register') {
-        if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
-        if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
-        if (typeof renderJustificacionesTable === 'function') renderJustificacionesTable();
+      } else if (targetTab === 'live') {
+        if (typeof updateAdminView === 'function') updateAdminView();
       }
     });
   });
@@ -4127,77 +4151,7 @@ function loadConsolidatedReport() {
   renderConsolidatedTable(cachedConsolidatedHistory);
 }
 
-// Lógica de pestañas del panel administrativo
-function setupAdminTabs() {
-  const tabButtons = document.querySelectorAll('.btn-admin-tab');
-  const tabContents = document.querySelectorAll('.admin-tab-content');
-  
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetTab = btn.getAttribute('data-tab');
-      
-      tabButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      tabContents.forEach(content => {
-        if (content.id === `tab-${targetTab}-content`) {
-          content.classList.add('active');
-          content.classList.remove('hidden');
-        } else {
-          content.classList.remove('active');
-          content.classList.add('hidden');
-        }
-      });
-      
-      if (targetTab === 'reports') {
-        updateReportEmployeeSelect();
-        const select = document.getElementById('select-report-employee');
-        if (select && select.value) {
-          renderAgentReport(select.value);
-        }
-      }
-      
-      if (targetTab === 'register') {
-        updateReportEmployeeSelect();
-        renderJustificacionesTable();
-        renderFeriadosTable();
-        syncJustificacionesFromGoogleSheets();
-        syncFeriadosFromGoogleSheets();
-      }
-      
-      if (targetTab === 'consolidated') {
-        loadConsolidatedReport();
-      }
-
-      if (targetTab === 'daily') {
-        const dateInput = document.getElementById('daily-select-date');
-        if (dateInput && !dateInput.value) {
-          const now = new Date();
-          const dayStr = String(now.getDate()).padStart(2, '0');
-          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-          dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
-        }
-        loadDailySummaryReport();
-      }
-
-      // Reverted overtime tab setup
-      
-      if (targetTab === 'monthly') {
-        const monthInput = document.getElementById('monthly-select-month');
-        if (monthInput && !monthInput.value) {
-          const now = new Date();
-          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-          monthInput.value = `${now.getFullYear()}-${monthStr}`;
-        }
-        loadMonthlyReport();
-      }
-
-      if (targetTab === 'gerencial') {
-        loadGerencialReport();
-      }
-    });
-  });
-
+function setupAgentHistoryListeners() {
   // Delegación de clicks para desplegar/colapsar filas en el reporte por agente
   const reportTableBody = document.getElementById('admin-report-table-body');
   if (reportTableBody) {
