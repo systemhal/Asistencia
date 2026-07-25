@@ -2687,6 +2687,28 @@ function normalizeDateStr(dateStr) {
     }
   }
   
+  // Si tiene formato ISO YYYY-MM-DD o YYYY-MM-DDT...
+  if (s.includes('-')) {
+    const cleanDate = s.split('T')[0];
+    const parts = cleanDate.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        if (parts[0].length === 4) {
+          const day = String(d).padStart(2, '0');
+          const month = String(m).padStart(2, '0');
+          return `${day}/${month}/${y}`;
+        } else if (parts[2].length === 4) {
+          const day = String(y).padStart(2, '0');
+          const month = String(m).padStart(2, '0');
+          return `${day}/${month}/${parts[2]}`;
+        }
+      }
+    }
+  }
+  
   // Si es un formato ISO o similar, intentar parsear
   try {
     const d = new Date(s);
