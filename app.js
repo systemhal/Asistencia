@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDailySummaryListeners();
   setupDeviceSecurityUIListeners();
   setupGerencialListeners();
+  setupValidationsListeners();
   validateDeviceSecurity();
   updatePrintTimestamp();
   syncInitialData().then(() => {
@@ -2108,6 +2109,9 @@ function updateAdminView() {
   
   // Actualizar la lista del selector de reportes
   updateReportEmployeeSelect();
+  if (typeof renderValidationsView === 'function') {
+    renderValidationsView();
+  }
 }
 
 function forceLogoutEmployee(dni) {
@@ -2262,6 +2266,7 @@ function setupAdminTabs() {
           'monthly': 'Resumen y Récord Mensual',
           'reports': 'Reportes Detallados por Agente',
           'gerencial': 'Vista y Métricas Gerenciales',
+          'validations': 'Control de Validaciones y Sanciones de Asistencia',
           'register': 'Gestión de Personal y Configuración'
         };
         pageTitleEl.textContent = titleMap[targetTab] || 'Panel de Administración';
@@ -2279,6 +2284,8 @@ function setupAdminTabs() {
         if (select && select.value && typeof renderAgentReport === 'function') renderAgentReport(select.value);
       } else if (targetTab === 'gerencial') {
         if (typeof renderGerencialView === 'function') renderGerencialView();
+      } else if (targetTab === 'validations') {
+        if (typeof renderValidationsView === 'function') renderValidationsView();
       } else if (targetTab === 'register') {
         if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
         if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
@@ -7438,6 +7445,17 @@ function getWorkDaysInRange(start, end) {
   return days;
 }
 
+function isEmployeeFlexible(emp) {
+  if (!emp) return false;
+  if (emp.scheduleType === 'flexible' || emp.scheduleType === 'Flexible') return true;
+  if (emp.weeklySchedule === 'flexible' || emp.weeklySchedule === 'Flexible') return true;
+  if (emp.tipoHorario === 'flexible' || emp.tipoHorario === 'Flexible' || emp.tipoHorario === 'Horario Flexible') return true;
+  if (emp.workStart === '—' || emp.workStart === '-' || emp.workStart === '---' || emp.workStart === 'Sin Horario' || emp.workStart === 'flexible' || emp.workStart === 'Flexible') return true;
+  if (typeof emp.weeklySchedule === 'string' && emp.weeklySchedule.toLowerCase().includes('flex')) return true;
+  if (emp.role && (emp.role.toLowerCase().includes('gerencia') || emp.role.toLowerCase().includes('flexible') || emp.role.toLowerCase().includes('director'))) return true;
+  return false;
+}
+
 function updateGerencialEmployeeSelect() {
   const sel = document.getElementById('ger-select-employee');
   if (!sel) return;
@@ -7448,9 +7466,9 @@ function updateGerencialEmployeeSelect() {
     .filter(dni => {
       const emp = employeesDatabase[dni];
       if (!emp) return false;
-      const isFlexible = (emp.weeklySchedule === 'flexible' || emp.workStart === '-' || emp.workStart === '—');
-      if (schedType === 'fixed') return !isFlexible;
-      if (schedType === 'flexible') return isFlexible;
+      const isFlex = isEmployeeFlexible(emp);
+      if (schedType === 'fixed') return !isFlex;
+      if (schedType === 'flexible') return isFlex;
       return true; // all
     })
     .sort((a,b) => employeesDatabase[a].name.localeCompare(employeesDatabase[b].name))
@@ -7488,9 +7506,9 @@ function loadGerencialReport() {
     .filter(dni => {
       const emp = employeesDatabase[dni];
       if (!emp) return false;
-      const isFlexible = (emp.weeklySchedule === 'flexible' || emp.workStart === '-' || emp.workStart === '—');
-      if (schedType === 'fixed') return !isFlexible;
-      if (schedType === 'flexible') return isFlexible;
+      const isFlex = isEmployeeFlexible(emp);
+      if (schedType === 'fixed') return !isFlex;
+      if (schedType === 'flexible') return isFlex;
       return true; // all
     });
   const workDays = getWorkDaysInRange(start, end);
@@ -8554,4 +8572,771 @@ function updateCloudStatus(status) {
     dot.style.boxShadow = '0 0 6px #ef4444';
     txt.textContent = 'Error de conexión';
   }
+}
+
+/* ==========================================================================
+   PESTAÑA VALIDACIONES Y SANCIONES - MOTOR DE CONTROL Y REGLAS DE NEGOCIO
+   ========================================================================== */
+
+let cachedValidationDataMap = {};
+
+function formatDateToInputISO(dateObj) {
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return '';
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function updateValidationEmployeeSelectOptions() {
+  const select = document.getElementById('val-select-employee');
+  if (!select) return;
+  const currentVal = select.value || 'all';
+
+  let html = `<option value="all" ${currentVal === 'all' ? 'selected' : ''}>Todos los Agentes</option>`;
+  const staffKeys = Object.keys(employeesDatabase);
+
+  staffKeys.sort((a, b) => (employeesDatabase[a]?.name || '').localeCompare(employeesDatabase[b]?.name || '')).forEach(key => {
+    const emp = employeesDatabase[key];
+    const cleanD = String(emp.dni || key).replace(/'/g, '').trim();
+    const isSel = (currentVal === cleanD) ? 'selected' : '';
+    html += `<option value="${cleanD}" ${isSel}>${escapeHtml(emp.name)} (${cleanD})</option>`;
+  });
+
+  select.innerHTML = html;
+}
+
+function setupValidationsListeners() {
+  const searchInput = document.getElementById('val-input-search');
+  const statusSelect = document.getElementById('val-select-status');
+  const empSelect = document.getElementById('val-select-employee');
+  const schedTypeSelect = document.getElementById('val-select-schedule-type');
+  const startDateInput = document.getElementById('val-input-start-date');
+  const endDateInput = document.getElementById('val-input-end-date');
+  const quickMonthBtn = document.getElementById('btn-val-quick-month');
+  const quick6mBtn = document.getElementById('btn-val-quick-6m');
+  const exportBtn = document.getElementById('btn-export-validations');
+  const modalCloseBtn = document.getElementById('btn-val-modal-close');
+
+  const now = new Date();
+  if (endDateInput && !endDateInput.value) {
+    endDateInput.value = formatDateToInputISO(now);
+  }
+  if (startDateInput && !startDateInput.value) {
+    const sixM = new Date(now);
+    sixM.setDate(now.getDate() - 180);
+    startDateInput.value = formatDateToInputISO(sixM);
+  }
+
+  updateValidationEmployeeSelectOptions();
+
+  if (statusSelect) statusSelect.addEventListener('change', () => renderValidationsView());
+  if (empSelect) empSelect.addEventListener('change', () => renderValidationsView());
+  if (schedTypeSelect) schedTypeSelect.addEventListener('change', () => renderValidationsView());
+
+  if (startDateInput) startDateInput.addEventListener('change', () => renderValidationsView());
+  if (endDateInput) endDateInput.addEventListener('change', () => renderValidationsView());
+
+  if (quickMonthBtn) {
+    quickMonthBtn.addEventListener('click', () => {
+      const n = new Date();
+      const first = new Date(n.getFullYear(), n.getMonth(), 1);
+      if (startDateInput) startDateInput.value = formatDateToInputISO(first);
+      if (endDateInput) endDateInput.value = formatDateToInputISO(n);
+      renderValidationsView();
+    });
+  }
+
+  if (quick6mBtn) {
+    quick6mBtn.addEventListener('click', () => {
+      const n = new Date();
+      const sixM = new Date(n);
+      sixM.setDate(n.getDate() - 180);
+      if (startDateInput) startDateInput.value = formatDateToInputISO(sixM);
+      if (endDateInput) endDateInput.value = formatDateToInputISO(n);
+      renderValidationsView();
+    });
+  }
+
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      exportValidationsReport();
+    });
+  }
+
+  if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', () => {
+      const modal = document.getElementById('modal-validation-details');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+      }
+    });
+  }
+}
+
+function parseInputDateStr(dateStr, isEndOfDay = false) {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+
+  if (s.includes('-')) {
+    const parts = s.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        const date = new Date(y, m, d);
+        if (isEndOfDay) date.setHours(23, 59, 59, 999);
+        else date.setHours(0, 0, 0, 0);
+        return date;
+      }
+    }
+  }
+
+  if (s.includes('/')) {
+    const parts = s.split('/');
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const y = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        const date = new Date(y, m, d);
+        if (isEndOfDay) date.setHours(23, 59, 59, 999);
+        else date.setHours(0, 0, 0, 0);
+        return date;
+      }
+    }
+  }
+
+  try {
+    const date = new Date(s);
+    if (!isNaN(date.getTime())) {
+      if (isEndOfDay) date.setHours(23, 59, 59, 999);
+      else date.setHours(0, 0, 0, 0);
+      return date;
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+function parseTimeToMin(timeStr) {
+  if (!timeStr || timeStr === '—') return 0;
+  const parts = String(timeStr).split(':');
+  if (parts.length < 2) return 0;
+  const hh = parseInt(parts[0], 10) || 0;
+  const mm = parseInt(parts[1], 10) || 0;
+  return hh * 60 + mm;
+}
+
+function renderValidationsView() {
+  const tbody = document.getElementById('admin-validations-table-body');
+  if (!tbody) return;
+
+  if (Object.keys(employeesDatabase).length === 0) {
+    loadLocalStorage();
+  }
+
+  updateValidationEmployeeSelectOptions();
+
+  const now = new Date();
+  const todayStr = normalizeDateStr(now);
+
+  // Leer rango de fechas seleccionado en los filtros
+  const startDateVal = document.getElementById('val-input-start-date')?.value;
+  const endDateVal = document.getElementById('val-input-end-date')?.value;
+
+  let rangeStart = parseInputDateStr(startDateVal, false);
+  if (!rangeStart) {
+    rangeStart = new Date(now);
+    rangeStart.setDate(now.getDate() - 180);
+    rangeStart.setHours(0, 0, 0, 0);
+  }
+
+  let rangeEnd = parseInputDateStr(endDateVal, true);
+  if (!rangeEnd) {
+    rangeEnd = new Date(now);
+    rangeEnd.setHours(23, 59, 59, 999);
+  }
+
+  // 1. Obtener inicio de la semana actual (Lunes 00:00:00)
+  const currentDayOfWeek = now.getDay();
+  const distToMon = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+  const weekMon = new Date(now);
+  weekMon.setDate(now.getDate() + distToMon);
+  weekMon.setHours(0, 0, 0, 0);
+
+  const weekSun = new Date(weekMon);
+  weekSun.setDate(weekMon.getDate() + 6);
+  weekSun.setHours(23, 59, 59, 999);
+
+  // 2. Obtener inicio del mes actual
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Indexar historial por DNI y Fecha
+  const historyByDniAndDate = {};
+  Object.keys(attendanceState).forEach(key => {
+    const cleanK = String(key).replace(/'/g, '').trim();
+    if (!historyByDniAndDate[cleanK]) historyByDniAndDate[cleanK] = {};
+    const stateObj = attendanceState[key];
+    if (stateObj && Array.isArray(stateObj.history)) {
+      stateObj.history.forEach(log => {
+        const normD = normalizeDateStr(log.dateStr || log.timestamp);
+        if (normD && normD !== '---') {
+          if (!historyByDniAndDate[cleanK][normD]) historyByDniAndDate[cleanK][normD] = [];
+          historyByDniAndDate[cleanK][normD].push(log);
+        }
+      });
+    }
+  });
+
+  // Indexar feriados por fecha
+  const holidaySet = new Set();
+  if (Array.isArray(feriadosDatabase)) {
+    feriadosDatabase.forEach(f => {
+      const normD = normalizeDateStr(f.date || f.fecha || f.dateStr);
+      if (normD) holidaySet.add(normD);
+    });
+  }
+
+  // Indexar justificaciones por DNI y fecha
+  const justMap = {};
+  if (Array.isArray(justificacionesDatabase)) {
+    justificacionesDatabase.forEach(j => {
+      const cleanD = String(j.dni).replace(/'/g, '').trim();
+      const normD = normalizeDateStr(j.dateStr || j.date || j.fecha);
+      if (cleanD && normD) {
+        if (!justMap[cleanD]) justMap[cleanD] = {};
+        justMap[cleanD][normD] = j;
+      }
+    });
+  }
+
+  cachedValidationDataMap = {};
+
+  const staffKeys = Object.keys(employeesDatabase);
+
+  staffKeys.forEach(empKey => {
+    const emp = employeesDatabase[empKey];
+    const cleanDni = String(emp.dni || empKey).replace(/'/g, '').trim();
+    const empName = emp.name || 'Colaborador';
+    const role = emp.role || 'Colaborador';
+    const weeklySchedule = emp.weeklySchedule;
+
+    let weeklyTardyDays = 0;
+    let weeklyTardyWithin10 = 0;
+    let weeklyTardyOver10 = 0;
+    let weeklyTardyOverQuotaCount = 0;
+
+    let monthlyTardyDays = 0;
+    let monthlyUnexcusedFaltas = 0;
+
+    let sixMonthTardyDays = 0;
+    let sixMonthUnexcusedFaltas = 0;
+
+    let maxConsecutiveFaltas = 0;
+    let currentConsecutive = 0;
+
+    const tardinessDetails = [];
+    const absenceDetails = [];
+    const weeklyToleranceUsedMap = {};
+
+    // Recorrer día por día en el RANGO SELECCIONADO (rangeStart -> rangeEnd)
+    const iterDate = new Date(rangeStart);
+    iterDate.setHours(0, 0, 0, 0);
+
+    const limitDate = new Date(rangeEnd < now ? rangeEnd : now);
+    limitDate.setHours(23, 59, 59, 999);
+
+    while (iterDate <= limitDate) {
+      const iterDateStr = normalizeDateStr(iterDate);
+      const dayNum = String(iterDate.getDay()); // 0=Sun, 1=Mon...
+
+      // Determinar clave de semana calendario (ISO Week)
+      const dateCopy = new Date(iterDate.getTime());
+      dateCopy.setHours(0, 0, 0, 0);
+      dateCopy.setDate(dateCopy.getDate() + 4 - (dateCopy.getDay() || 7));
+      const yearStart = new Date(dateCopy.getFullYear(), 0, 1);
+      const weekNo = Math.ceil((((dateCopy - yearStart) / 86400000) + 1) / 7);
+      const weekKey = `${dateCopy.getFullYear()}-W${weekNo}`;
+
+      // Determinar si era día laborable según weeklySchedule
+      let isWorkDay = true;
+      let expectedStart = emp.workStart || "08:00";
+      let expectedEnd = emp.workEnd || "17:00";
+
+      if (weeklySchedule && weeklySchedule !== 'flexible' && weeklySchedule[dayNum]) {
+        const schedDay = weeklySchedule[dayNum];
+        if (schedDay.isRestDay) {
+          isWorkDay = false;
+        } else {
+          expectedStart = schedDay.workStart || expectedStart;
+          expectedEnd = schedDay.workEnd || expectedEnd;
+        }
+      } else if (dayNum === '0') { // Domingo descanso por defecto
+        isWorkDay = false;
+      }
+
+      // Si es feriado o tiene justificación, no es falta injustificada
+      const isHoliday = holidaySet.has(iterDateStr);
+      const isJustified = justMap[cleanDni] && justMap[cleanDni][iterDateStr];
+
+      // Buscar marca de Ingreso en el día
+      const dayLogs = (historyByDniAndDate[cleanDni] && historyByDniAndDate[cleanDni][iterDateStr]) ? historyByDniAndDate[cleanDni][iterDateStr] : [];
+      const ingresoLog = dayLogs.find(l => l.action === 'Ingreso');
+
+      if (ingresoLog) {
+        // Hubo asistencia: rompe la racha de faltas consecutivas
+        currentConsecutive = 0;
+
+        if (isWorkDay && !isJustified && !isEmployeeFlexible(emp)) {
+          const actualMin = parseTimeToMin(ingresoLog.timeStr);
+          const expectedMin = parseTimeToMin(expectedStart);
+          const tardyMin = actualMin - expectedMin;
+
+          if (tardyMin > 0) {
+            let isToleratedByQuota = false;
+
+            if (tardyMin <= 10) {
+              const usedInWeek = weeklyToleranceUsedMap[weekKey] || 0;
+              if (usedInWeek < 2) {
+                weeklyToleranceUsedMap[weekKey] = usedInWeek + 1;
+                isToleratedByQuota = true;
+              }
+            }
+
+            tardinessDetails.push({
+              dateStr: iterDateStr,
+              timeStr: ingresoLog.timeStr,
+              expectedStart: expectedStart,
+              tardyMin: tardyMin,
+              isWithin10: (tardyMin <= 10),
+              isTolerated: isToleratedByQuota
+            });
+
+            // Conteo en semana actual
+            if (iterDate >= weekMon && iterDate <= weekSun) {
+              weeklyTardyDays++;
+              if (tardyMin <= 10) weeklyTardyWithin10++;
+              else weeklyTardyOver10++;
+              if (!isToleratedByQuota) weeklyTardyOverQuotaCount++;
+            }
+
+            // Solo si NO está tolerado por la cuota semanal, cuenta como Tardanza Efectiva acumulable (Regla 5)
+            if (!isToleratedByQuota) {
+              if (iterDate >= monthStart) {
+                monthlyTardyDays++;
+              }
+              sixMonthTardyDays++;
+            }
+          }
+        }
+      } else {
+        // No hubo marca de ingreso
+        const currentMinOfDay = now.getHours() * 60 + now.getMinutes();
+        const isPastOrEnded = (iterDate < now) || (iterDate.toDateString() === now.toDateString() && currentMinOfDay > parseTimeToMin(expectedEnd));
+
+        if (isWorkDay && !isHoliday && !isJustified && isPastOrEnded) {
+          // Falta injustificada
+          currentConsecutive++;
+          if (currentConsecutive > maxConsecutiveFaltas) {
+            maxConsecutiveFaltas = currentConsecutive;
+          }
+
+          absenceDetails.push({
+            dateStr: iterDateStr,
+            dayLabel: getDayLabelName(dayNum)
+          });
+
+          if (iterDate >= monthStart) {
+            monthlyUnexcusedFaltas++;
+          }
+          sixMonthUnexcusedFaltas++;
+        } else {
+          // Día no laborable, feriado o justificado: rompe racha de consecutivas
+          currentConsecutive = 0;
+        }
+      }
+
+      iterDate.setDate(iterDate.getDate() + 1);
+    }
+
+    // APLICACIÓN DE REGLAS DE NEGOCIO:
+
+    // Regla 5: 3 Tardanzas Efectivas = 1 Falta
+    const monthlyConvertedFaltas = Math.floor(monthlyTardyDays / 3);
+    const sixMonthConvertedFaltas = Math.floor(sixMonthTardyDays / 3);
+
+    const monthlyTotalFaltas = monthlyUnexcusedFaltas + monthlyConvertedFaltas;
+    const sixMonthTotalFaltas = sixMonthUnexcusedFaltas + sixMonthConvertedFaltas;
+
+    // Regla 1: Tolerancia semanal (máximo 2 días de 10 min por semana)
+    const rule1_excesoTolerancia = (weeklyTardyOverQuotaCount > 0 || weeklyTardyOver10 > 0);
+
+    // Regla 2: 3 Faltas Consecutivas -> Baja Automática
+    const rule2_bajaAutomatica = (maxConsecutiveFaltas >= 3);
+
+    // Regla 3: 5 Faltas aleatorias durante el mes O 3 faltas convertidas por tardanza en el mes -> Retiro de la Empresa
+    const rule3_retiroMes = (monthlyTotalFaltas >= 5 || monthlyConvertedFaltas >= 3);
+
+    // Regla 4: 15 Faltas aleatorias durante los últimos 6 meses / rango -> Retiro de la Empresa
+    const rule4_retiro6M = (sixMonthTotalFaltas >= 15);
+
+    // Jerarquía de Sanción / Estado
+    let statusCategory = 'ok';
+    let statusLabel = '✅ En Regla';
+    let badgeHTML = '<span class="val-badge val-badge-ok"><span class="material-symbols-rounded" style="font-size:14px;">verified</span>En Regla</span>';
+
+    if (rule2_bajaAutomatica) {
+      statusCategory = 'baja';
+      statusLabel = '🚨 Baja Automática';
+      badgeHTML = '<span class="val-badge val-badge-baja"><span class="material-symbols-rounded" style="font-size:14px;">gavel</span>🚨 BAJA AUTOMÁTICA</span>';
+    } else if (rule3_retiroMes || rule4_retiro6M) {
+      statusCategory = 'retiro';
+      let motivo = 'Retiro';
+      if (monthlyConvertedFaltas >= 3) {
+        motivo = '3 Faltas por Tardanza';
+      } else if (monthlyTotalFaltas >= 5) {
+        motivo = '5+ Faltas Mes';
+      } else {
+        motivo = '15+ Faltas 6M';
+      }
+      statusLabel = `⛔ Retiro (${motivo})`;
+      badgeHTML = `<span class="val-badge val-badge-retiro"><span class="material-symbols-rounded" style="font-size:14px;">block</span>⛔ RETIRO (${motivo})</span>`;
+    } else if (rule1_excesoTolerancia) {
+      statusCategory = 'warning';
+      statusLabel = '⚠️ Exceso Tolerancia';
+      badgeHTML = '<span class="val-badge val-badge-warning"><span class="material-symbols-rounded" style="font-size:14px;">warning</span>⚠️ Exceso Tolerancia</span>';
+    }
+
+    const isFlexible = isEmployeeFlexible(emp);
+    const scheduleType = isFlexible ? 'flexible' : 'fixed';
+
+    cachedValidationDataMap[cleanDni] = {
+      dni: cleanDni,
+      name: empName,
+      role: role,
+      scheduleType: scheduleType,
+      weeklyTardyDays,
+      weeklyTardyWithin10,
+      weeklyTardyOver10,
+      monthlyTardyDays,
+      monthlyConvertedFaltas,
+      monthlyUnexcusedFaltas,
+      monthlyTotalFaltas,
+      sixMonthTardyDays,
+      sixMonthConvertedFaltas,
+      sixMonthUnexcusedFaltas,
+      sixMonthTotalFaltas,
+      maxConsecutiveFaltas,
+      statusCategory,
+      statusLabel,
+      badgeHTML,
+      tardinessDetails,
+      absenceDetails,
+      rules: {
+        excesoTolerancia: rule1_excesoTolerancia,
+        bajaAutomatica: rule2_bajaAutomatica,
+        retiroMes: rule3_retiroMes,
+        retiro6M: rule4_retiro6M
+      }
+    };
+  });
+
+  // Renderizar contadores KPI principales en base a los filtros seleccionados
+  const empFilter = document.getElementById('val-select-employee')?.value || 'all';
+  const schedTypeFilter = document.getElementById('val-select-schedule-type')?.value || 'all';
+
+  const dataList = Object.values(cachedValidationDataMap);
+  const relevantList = dataList.filter(item => {
+    const matchesEmp = (empFilter === 'all' || item.dni === empFilter);
+    const matchesSchedType = (schedTypeFilter === 'all' || item.scheduleType === schedTypeFilter);
+    return matchesEmp && matchesSchedType;
+  });
+
+  const totalCount = relevantList.length;
+  let bajaCount = 0;
+  let retiroCount = 0;
+  let toleranciaCount = 0;
+
+  relevantList.forEach(d => {
+    if (d.statusCategory === 'baja') bajaCount++;
+    else if (d.statusCategory === 'retiro') retiroCount++;
+    else if (d.statusCategory === 'warning') toleranciaCount++;
+  });
+
+  const elStatTotal = document.getElementById('val-stat-total');
+  const elStatBaja = document.getElementById('val-stat-baja');
+  const elStatRetiro = document.getElementById('val-stat-retiro');
+  const elStatTolerancia = document.getElementById('val-stat-tolerancia');
+
+  if (elStatTotal) elStatTotal.textContent = totalCount;
+  if (elStatBaja) elStatBaja.textContent = bajaCount;
+  if (elStatRetiro) elStatRetiro.textContent = retiroCount;
+  if (elStatTolerancia) elStatTolerancia.textContent = toleranciaCount;
+
+  // Pintar tabla con filtros aplicados
+  renderValidationsTableRows();
+}
+
+function getDayLabelName(dayNumStr) {
+  const names = { "1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "0": "Domingo" };
+  return names[dayNumStr] || "Día";
+}
+
+function renderValidationsTableRows() {
+  const tbody = document.getElementById('admin-validations-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (Object.keys(cachedValidationDataMap).length === 0) {
+    renderValidationsView();
+    return;
+  }
+
+  const statusFilter = document.getElementById('val-select-status')?.value || 'all';
+  const empFilter = document.getElementById('val-select-employee')?.value || 'all';
+  const schedTypeFilter = document.getElementById('val-select-schedule-type')?.value || 'all';
+
+  const dataList = Object.values(cachedValidationDataMap);
+
+  const filtered = dataList.filter(item => {
+    const matchesStatus = (statusFilter === 'all') || (item.statusCategory === statusFilter);
+    const matchesEmp = (empFilter === 'all') || (item.dni === empFilter);
+    const matchesSchedType = (schedTypeFilter === 'all') || (item.scheduleType === schedTypeFilter);
+    return matchesStatus && matchesEmp && matchesSchedType;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 25px; color: var(--text-muted);">
+          <span class="material-symbols-rounded" style="font-size: 32px; display: block; margin-bottom: 6px;">search_off</span>
+          No se encontraron colaboradores que coincidan con el filtro seleccionado.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  filtered.forEach(item => {
+    const tr = document.createElement('tr');
+
+    // Formato de Tardanzas Semanales
+    let weeklyTardyDisplay = `<span style="color: var(--text-muted);">${item.weeklyTardyDays} días</span>`;
+    if (item.weeklyTardyDays > 2 || item.weeklyTardyOver10 > 0) {
+      weeklyTardyDisplay = `<span class="val-text-amber" style="font-weight: 700;">${item.weeklyTardyDays} días ⚠️ Exceso</span>`;
+    } else if (item.weeklyTardyDays > 0) {
+      weeklyTardyDisplay = `<span style="color: #4ade80; font-weight: 600;">${item.weeklyTardyDays} días (Tolerado)</span>`;
+    }
+
+    // Formato Tardanzas Mes (Faltas 3:1)
+    const convertedDisplay = item.monthlyConvertedFaltas > 0 
+      ? `<span style="color: #38bdf8; font-weight: 700;">${item.monthlyTardyDays} tard. (+${item.monthlyConvertedFaltas} falta)</span>`
+      : `<span style="color: var(--text-secondary);">${item.monthlyTardyDays} tardanzas</span>`;
+
+    // Formato Faltas (Mes / 6M)
+    let faltasMonthDisplay = item.monthlyTotalFaltas >= 5 
+      ? `<strong style="color: #fb923c;">${item.monthlyTotalFaltas} mes</strong>` 
+      : `${item.monthlyTotalFaltas} mes`;
+    let faltas6MDisplay = item.sixMonthTotalFaltas >= 15 
+      ? `<strong style="color: #c084fc;">${item.sixMonthTotalFaltas} en 6M</strong>` 
+      : `${item.sixMonthTotalFaltas} en 6M`;
+
+    // Formato Máx. Consecutivas
+    let consecDisplay = item.maxConsecutiveFaltas >= 3
+      ? `<span style="color: #f87171; font-weight: 800;">🚨 ${item.maxConsecutiveFaltas} días</span>`
+      : `<span style="color: var(--text-secondary);">${item.maxConsecutiveFaltas} días</span>`;
+
+    tr.innerHTML = `
+      <td>
+        <div style="font-weight: 600; color: var(--text-primary);">${escapeHtml(item.name)}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(item.role)}</div>
+      </td>
+      <td style="font-family: monospace; font-weight: 600;">${escapeHtml(item.dni)}</td>
+      <td style="text-align: center;">${weeklyTardyDisplay}</td>
+      <td style="text-align: center;">${convertedDisplay}</td>
+      <td style="text-align: center;">${faltasMonthDisplay} / ${faltas6MDisplay}</td>
+      <td style="text-align: center;">${consecDisplay}</td>
+      <td style="text-align: center;">${item.badgeHTML}</td>
+      <td style="text-align: center;">
+        <button class="btn-table-action" onclick="openValidationDetailsModal('${escapeHtml(item.dni)}')" title="Ver Auditoría Detallada" style="margin: 0 auto; display: inline-flex;">
+          <span class="material-symbols-rounded" style="font-size: 16px;">visibility</span>
+          <span>Inspeccionar</span>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openValidationDetailsModal(dni) {
+  const data = cachedValidationDataMap[String(dni).replace(/'/g, '').trim()];
+  if (!data) {
+    showToast('error', 'Error', 'No se encontraron datos de validación para este colaborador.');
+    return;
+  }
+
+  const modal = document.getElementById('modal-validation-details');
+  if (!modal) return;
+
+  document.getElementById('val-modal-emp-name').textContent = data.name;
+  document.getElementById('val-modal-emp-info').textContent = `DNI: ${data.dni} | Cargo: ${data.role}`;
+  document.getElementById('val-modal-emp-badge').innerHTML = data.badgeHTML;
+
+  document.getElementById('val-modal-stat-tardy-week').textContent = `${data.weeklyTardyDays}d`;
+  document.getElementById('val-modal-stat-converted').textContent = `+${data.monthlyConvertedFaltas}`;
+  document.getElementById('val-modal-stat-absent-month').textContent = data.monthlyTotalFaltas;
+  document.getElementById('val-modal-stat-absent-6m').textContent = data.sixMonthTotalFaltas;
+  document.getElementById('val-modal-stat-consecutive').textContent = `${data.maxConsecutiveFaltas}d`;
+
+  const container = document.getElementById('val-modal-breakdown-list');
+  container.innerHTML = '';
+
+  // 1. Mostrar resumen de Reglas activadas
+  let rulesSummaryHTML = '';
+  if (data.rules.bajaAutomatica) {
+    rulesSummaryHTML += `<div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #f87171; border-top: 1px solid rgba(239, 68, 68, 0.2); border-right: 1px solid rgba(239, 68, 68, 0.2); border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding: 12px 14px; border-radius: 8px; color: #f87171; font-size: 0.83rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+      <span class="material-symbols-rounded" style="font-size: 22px; flex-shrink: 0;">gavel</span>
+      <span><strong>Sanción (Regla 2):</strong> ${data.maxConsecutiveFaltas} faltas consecutivas injustificadas. Causal de Baja Automática.</span>
+    </div>`;
+  }
+  if (data.rules.retiroMes) {
+    const motivoDetalle = (data.monthlyConvertedFaltas >= 3)
+      ? `${data.monthlyConvertedFaltas} faltas acumuladas por tardanzas (${data.monthlyTardyDays} tardanzas en el mes)`
+      : `${data.monthlyTotalFaltas} faltas acumuladas en el mes (límite 5)`;
+    rulesSummaryHTML += `<div style="background: rgba(249, 115, 22, 0.1); border-left: 4px solid #fb923c; border-top: 1px solid rgba(249, 115, 22, 0.2); border-right: 1px solid rgba(249, 115, 22, 0.2); border-bottom: 1px solid rgba(249, 115, 22, 0.2); padding: 12px 14px; border-radius: 8px; color: #fb923c; font-size: 0.83rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+      <span class="material-symbols-rounded" style="font-size: 22px; flex-shrink: 0;">block</span>
+      <span><strong>Sanción (Regla 3):</strong> ${motivoDetalle}. Causal de Retiro de la Empresa.</span>
+    </div>`;
+  }
+  if (data.rules.retiro6M) {
+    rulesSummaryHTML += `<div style="background: rgba(192, 132, 252, 0.1); border-left: 4px solid #c084fc; border-top: 1px solid rgba(192, 132, 252, 0.2); border-right: 1px solid rgba(192, 132, 252, 0.2); border-bottom: 1px solid rgba(192, 132, 252, 0.2); padding: 12px 14px; border-radius: 8px; color: #c084fc; font-size: 0.83rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+      <span class="material-symbols-rounded" style="font-size: 22px; flex-shrink: 0;">gavel</span>
+      <span><strong>Sanción (Regla 4):</strong> ${data.sixMonthTotalFaltas} faltas acumuladas en 6 meses (límite 15). Causal de Retiro de la Empresa.</span>
+    </div>`;
+  }
+  if (data.rules.excesoTolerancia) {
+    rulesSummaryHTML += `<div class="val-banner-warning" style="padding: 12px 14px; border-radius: 8px; font-size: 0.83rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+      <span class="material-symbols-rounded" style="font-size: 22px; flex-shrink: 0;">warning</span>
+      <span><strong>Observación (Regla 1):</strong> Excede la cuota de 2 días de tolerancia en la semana actual (${data.weeklyTardyDays} días de tardanza).</span>
+    </div>`;
+  }
+
+  if (rulesSummaryHTML) {
+    container.innerHTML += rulesSummaryHTML;
+  }
+
+  // 2. Desglose de Faltas Injustificadas
+  if (data.absenceDetails.length > 0) {
+    const absCard = document.createElement('div');
+    absCard.className = 'val-audit-card';
+    
+    let absListHTML = `<div class="val-audit-card-title" style="color: #f87171;">
+      <span><span class="material-symbols-rounded" style="vertical-align: sub; font-size: 20px;">person_off</span> Faltas Injustificadas Registradas</span>
+      <span style="font-size: 0.78rem; font-weight: 600; opacity: 0.8;">Total: ${data.absenceDetails.length} días</span>
+    </div>`;
+    absListHTML += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+    data.absenceDetails.forEach(a => {
+      absListHTML += `<span style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600;">📅 ${a.dateStr} (${a.dayLabel})</span>`;
+    });
+    absListHTML += `</div>`;
+    absCard.innerHTML = absListHTML;
+    container.appendChild(absCard);
+  }
+
+  // 3. Desglose de Tardanzas en Tabla Profesional
+  if (data.tardinessDetails.length > 0) {
+    const tardCard = document.createElement('div');
+    tardCard.className = 'val-audit-card';
+    
+    let tardListHTML = `<div class="val-audit-card-title val-text-amber">
+      <span><span class="material-symbols-rounded" style="vertical-align: sub; font-size: 20px;">schedule</span> Registro de Tardanzas Aleatorias (${data.tardinessDetails.length} días)</span>
+      <span style="font-size: 0.78rem; color: #38bdf8; font-weight: 600;">3 tardanzas = +1 falta (+${data.sixMonthConvertedFaltas} conv.)</span>
+    </div>`;
+    
+    tardListHTML += `<div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+      <table class="val-audit-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Marcación / Horario</th>
+            <th>Retraso</th>
+            <th>Dictamen de Regla</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    data.tardinessDetails.forEach(t => {
+      let tolPill = '';
+      if (t.isTolerated) {
+        tolPill = `<span class="val-pill-tag tag-green"><span class="material-symbols-rounded" style="font-size: 13px;">check_circle</span>Tolerado (<=10m)</span>`;
+      } else if (t.isWithin10) {
+        tolPill = `<span class="val-pill-tag tag-orange"><span class="material-symbols-rounded" style="font-size: 13px;">warning</span>Excede Cuota Semanal</span>`;
+      } else {
+        tolPill = `<span class="val-pill-tag tag-red"><span class="material-symbols-rounded" style="font-size: 13px;">error</span>Exceso (>10m)</span>`;
+      }
+
+      tardListHTML += `
+        <tr>
+          <td><strong style="color: var(--text-primary);">${t.dateStr}</strong></td>
+          <td>${t.timeStr} <span style="font-size: 0.72rem; color: var(--text-muted);">(prog. ${t.expectedStart})</span></td>
+          <td><span class="val-text-amber" style="font-weight: 700;">+${t.tardyMin} min</span></td>
+          <td>${tolPill}</td>
+        </tr>
+      `;
+    });
+
+    tardListHTML += `</tbody></table></div>`;
+    tardCard.innerHTML = tardListHTML;
+    container.appendChild(tardCard);
+  }
+
+  if (data.absenceDetails.length === 0 && data.tardinessDetails.length === 0) {
+    container.innerHTML += `<div style="text-align: center; color: #4ade80; padding: 25px; font-weight: 600; background: var(--surface-1); border-radius: 8px; margin-top: 10px;"><span class="material-symbols-rounded" style="font-size: 32px; display: block; margin-bottom: 6px;">verified</span>El colaborador no registra tardanzas ni faltas en el período evaluado.</div>`;
+  }
+
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+  modal.style.zIndex = '10000';
+}
+
+function exportValidationsReport() {
+  const dataList = Object.values(cachedValidationDataMap);
+  if (dataList.length === 0) {
+    showToast('error', 'Error', 'No hay datos de validaciones para exportar.');
+    return;
+  }
+
+  if (typeof XLSX === 'undefined') {
+    showToast('error', 'Error', 'La biblioteca XLSX no se encuentra cargada.');
+    return;
+  }
+
+  const exportRows = dataList.map(item => ({
+    "DNI": item.dni,
+    "Colaborador": item.name,
+    "Cargo": item.role,
+    "Tardanzas Semanales": item.weeklyTardyDays,
+    "Exceso Tolerancia Semanal": item.rules.excesoTolerancia ? "SÍ (>2/semana)" : "NO",
+    "Tardanzas Mes": item.monthlyTardyDays,
+    "Faltas Convertidas 3:1 (Mes)": item.monthlyConvertedFaltas,
+    "Faltas Injustificadas (Mes)": item.monthlyUnexcusedFaltas,
+    "Total Faltas (Mes)": item.monthlyTotalFaltas,
+    "Faltas Injustificadas (6 Meses)": item.sixMonthUnexcusedFaltas,
+    "Total Faltas (6 Meses)": item.sixMonthTotalFaltas,
+    "Máx. Faltas Consecutivas": item.maxConsecutiveFaltas,
+    "Estado de Sanción": item.statusLabel,
+    "Baja Automática": item.rules.bajaAutomatica ? "SÍ (3+ Consecutivas)" : "NO",
+    "Retiro por Faltas": (item.rules.retiroMes || item.rules.retiro6M) ? "SÍ" : "NO"
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(exportRows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Validaciones y Sanciones");
+
+  const todayIso = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(workbook, `Auditoria_Sanciones_AsistenciaMSI_${todayIso}.xlsx`);
+  showToast('success', 'Exportación Exitosa', 'El reporte de validaciones fue descargado.');
 }
