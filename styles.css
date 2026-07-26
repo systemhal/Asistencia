@@ -2685,7 +2685,6 @@ body.light-theme .val-single-line-bar .gerencial-input {
   border-collapse: separate !important;
   border-spacing: 0 !important;
   border-radius: 12px !important;
-  overflow: hidden !important;
 }
 
 /* Container de Scroll Estático para Tabla de Validaciones */
