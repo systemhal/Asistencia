@@ -16,7 +16,7 @@ function ensureSheetsExist() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
   var sheets = {
-    "Personal": ["Fecha", "Dni", "Nombre Completo", "Edad", "Sexo", "Cargo / Puesto", "Entrada Jornada", "Salida Jornada", "Inicio Break", "Fin Break", "PIN", "Horarios Semanales"],
+    "Personal": ["Fecha", "Dni", "Nombre Completo", "Edad", "Sexo", "Cargo / Puesto", "Entrada Jornada", "Salida Jornada", "Inicio Break", "Fin Break", "PIN", "Horarios Semanales", "Estado", "Fecha_Baja"],
     "Asistencia": ["Fecha", "Hora", "DNI", "Nombre Colaborador", "Acción", "Detalles", "Timestamp Unix", "Dispositivo"],
     "Justificaciones": ["DNI", "Fecha", "Tipo", "Detalles", "Hora Inicio", "Hora Fin", "¿Con Goce?"],
     "Feriados": ["Fecha", "Nombre"],
@@ -231,7 +231,9 @@ function doPost(e) {
         postData.breakStart || "13:00", // 9. Inicio Break (I)
         postData.breakEnd || "14:00",   // 10. Fin Break (J)
         postData.pin || "1234",   // 11. PIN (K)
-        postData.weeklySchedule || ""   // 12. Horarios Semanales (L)
+        postData.weeklySchedule || "",   // 12. Horarios Semanales (L)
+        postData.estado || "Activo", // 13. Estado (M)
+        postData.fechaBaja || "" // 14. Fecha Baja (N)
       ]);
       updateHorariosSheet(ss, postData.employeeId, postData.employeeName, postData.weeklySchedule || "");
       return getJsonResponse({ status: "ok", message: "Colaborador registrado." });
@@ -252,7 +254,7 @@ function doPost(e) {
       }
       
       if (foundRow >= 0) {
-        sheet.getRange(foundRow, 2, 1, 11).setValues([[
+        sheet.getRange(foundRow, 2, 1, 13).setValues([[
           postData.employeeId,      // 2. Dni (B)
           postData.employeeName,    // 3. Nombre Completo (C)
           postData.age || "—",      // 4. Edad (D)
@@ -263,7 +265,9 @@ function doPost(e) {
           postData.breakStart,      // 9. Inicio Break (I)
           postData.breakEnd,        // 10. Fin Break (J)
           postData.pin,             // 11. PIN (K)
-          postData.weeklySchedule || "" // 12. Horarios Semanales (L)
+          postData.weeklySchedule || "", // 12. Horarios Semanales (L)
+          postData.estado || "Activo", // 13. Estado (M)
+          postData.fechaBaja || "" // 14. Fecha Baja (N)
         ]]);
         updateHorariosSheet(ss, postData.employeeId, postData.employeeName, postData.weeklySchedule || "");
         return getJsonResponse({ status: "ok", message: "Colaborador actualizado." });
@@ -424,7 +428,9 @@ function getEmployeesData(ss) {
       breakStart: formatTimeValue(data[i][8]), // Columna I (Inicio Break)
       breakEnd: formatTimeValue(data[i][9]),   // Columna J (Fin Break)
       pin: String(data[i][10]), // Columna K (PIN)
-      weeklySchedule: data[i][11] || "" // Columna L (Horarios Semanales)
+      weeklySchedule: data[i][11] || "", // Columna L (Horarios Semanales)
+      estado: data[i][12] || "Activo", // Columna M (Estado)
+      fechaBaja: data[i][13] || "" // Columna N (Fecha Baja)
     });
   }
   return employees;
