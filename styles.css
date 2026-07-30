@@ -1191,27 +1191,90 @@ input::-webkit-calendar-picker-indicator:hover {
   box-shadow: 0 0 12px var(--primary-glow);
 }
 
-/* Responsive Media Queries for Admin Sidebar */
+/* Responsive Media Queries for Admin Sidebar & Full Dashboard */
 @media (max-width: 992px) {
-  #view-admin.admin-layout-sidebar {
-    grid-template-columns: 1fr;
+  #view-admin.admin-layout-sidebar:not(.hidden) {
+    grid-template-columns: 1fr !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   .admin-sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
-    padding: 18px;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 950 !important;
+    height: auto !important;
+    max-height: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    padding: 12px 14px !important;
+    gap: 10px !important;
+    flex-shrink: 0 !important;
+    background: var(--bg-secondary) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .admin-sidebar-brand {
+    padding-bottom: 8px !important;
+  }
+
+  .admin-sidebar-nav-container {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 4px !important;
+  }
+
+  .sidebar-nav-title {
+    display: none !important;
   }
 
   .admin-tabs-nav.vertical {
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: 6px;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    gap: 8px !important;
+    padding: 4px 2px 6px 2px !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .admin-tabs-nav.vertical::-webkit-scrollbar {
+    display: none !important;
   }
 
   .admin-tabs-nav.vertical .btn-admin-tab {
-    white-space: nowrap;
-    width: auto;
+    white-space: nowrap !important;
+    width: auto !important;
+    flex-shrink: 0 !important;
+    padding: 8px 14px !important;
+    font-size: 0.84rem !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .admin-sidebar-footer {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    padding-top: 8px !important;
+  }
+
+  .admin-main-content {
+    height: auto !important;
+    overflow-y: visible !important;
+    padding: 16px 12px !important;
+    flex-grow: 1 !important;
+    min-width: 0 !important;
   }
 }
 
@@ -1355,7 +1418,7 @@ input::-webkit-calendar-picker-indicator:hover {
   }
 }
 
-@media (max-width:500px) {
+@media (max-width: 640px) {
   .app-container { padding: 10px; }
   .card          { padding: 18px 13px; }
   .dashboard-user-bar { flex-direction:column; align-items:flex-start; }
@@ -1363,6 +1426,69 @@ input::-webkit-calendar-picker-indicator:hover {
   .break-actions-row { grid-template-columns: 1fr; }
   .clock-display { font-size: 2.6rem; }
   .admin-stats-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Full responsive mobile filter bars & control alignment */
+  .report-filter-bar,
+  .consolidated-filter-bar,
+  .monthly-filter-bar,
+  .daily-filter-bar,
+  .quick-filters-group {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .report-filter-bar .input-group,
+  .consolidated-filter-bar .input-group,
+  .monthly-filter-bar .input-group,
+  .daily-filter-bar .input-group,
+  .report-filter-bar select,
+  .report-filter-bar input,
+  .consolidated-filter-bar select,
+  .consolidated-filter-bar input,
+  .report-filter-bar button,
+  .consolidated-filter-bar button {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-top-bar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+    padding-bottom: 12px !important;
+    border-bottom: 1px solid var(--border-color) !important;
+  }
+
+  .admin-top-actions {
+    display: grid !important;
+    grid-template-columns: auto 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+    align-items: center !important;
+  }
+
+  .admin-top-actions .btn-top-sync,
+  .admin-top-actions .btn-top-close {
+    width: 100% !important;
+    justify-content: center !important;
+    font-size: 0.8rem !important;
+    padding: 0 10px !important;
+    height: 38px !important;
+  }
+
+  .table-responsive,
+  .report-scroll-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+  }
 }
 
 /* ── ALERTAS Y TARDANZAS ──────────────────────────────────── */

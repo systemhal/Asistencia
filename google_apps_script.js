@@ -144,6 +144,7 @@ function doGet(e) {
           config: {
             security_block_mobile: props.getProperty('security_block_mobile') === 'true',
             security_restrict_pcs: props.getProperty('security_restrict_pcs') === 'true',
+            security_restrict_mobiles: props.getProperty('security_restrict_mobiles') === 'true',
             tardiness_tolerance: props.getProperty('tardiness_tolerance') ? parseInt(props.getProperty('tardiness_tolerance'), 10) : 5,
             api_key: getStoredApiKey()
           }
@@ -206,6 +207,9 @@ function doPost(e) {
       }
       if (postData.security_restrict_pcs !== undefined) {
         props.setProperty('security_restrict_pcs', String(postData.security_restrict_pcs === true || postData.security_restrict_pcs === 'true'));
+      }
+      if (postData.security_restrict_mobiles !== undefined) {
+        props.setProperty('security_restrict_mobiles', String(postData.security_restrict_mobiles === true || postData.security_restrict_mobiles === 'true'));
       }
       if (postData.tardiness_tolerance !== undefined) {
         props.setProperty('tardiness_tolerance', String(postData.tardiness_tolerance));
