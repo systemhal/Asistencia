@@ -1403,12 +1403,12 @@ function setupEventListeners() {
   const attendanceButtons = [btnIngreso, btnBreakIn, btnBreakOut, btnSalida];
   
   attendanceButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const action = btn.getAttribute('data-action');
       const dni = currentSession ? currentSession.dni : null;
       const employee = dni ? employeesDatabase[dni] : null;
 
-      // Restricción en Feriados, Días de Descanso e Ingreso Anticipado
+      // Restricción en Feriados, Días de Descanso e Ingreso Anticipado para 'Ingreso'
       if (action === 'Ingreso' && employee) {
         const now = new Date();
         const normToday = getTodayNormalizedDateStr(now);
@@ -1473,6 +1473,42 @@ function setupEventListeners() {
               return;
             }
           }
+        }
+      } else {
+        // Ventana Flotante de Confirmación para Inicio Break, Fin Break y Salida
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+        let confirmConfig = null;
+        if (action === 'Inicio Refrigerio') {
+          confirmConfig = {
+            title: 'Confirmar Inicio de Refrigerio 🥪',
+            message: `¿Estás seguro de que deseas registrar tu <strong>Inicio de Break</strong> a las <strong>${timeStr}</strong>?`,
+            type: 'warning',
+            acceptText: 'Sí, Iniciar Break',
+            cancelText: 'Cancelar'
+          };
+        } else if (action === 'Fin Refrigerio') {
+          confirmConfig = {
+            title: 'Confirmar Fin de Refrigerio ☕',
+            message: `¿Estás seguro de que deseas registrar tu <strong>Fin de Break</strong> a las <strong>${timeStr}</strong>?`,
+            type: 'info',
+            acceptText: 'Sí, Finalizar Break',
+            cancelText: 'Cancelar'
+          };
+        } else if (action === 'Salida') {
+          confirmConfig = {
+            title: 'Confirmar Salida de Jornada 🚪',
+            message: `¿Estás seguro de que deseas registrar tu <strong>Salida de Jornada</strong> a las <strong>${timeStr}</strong>?`,
+            type: 'danger',
+            acceptText: 'Sí, Registrar Salida',
+            cancelText: 'Cancelar'
+          };
+        }
+
+        if (confirmConfig) {
+          const confirmed = await showCustomConfirm(confirmConfig);
+          if (!confirmed) return; // Si el colaborador cancela, detiene el proceso de marcación
         }
       }
 
