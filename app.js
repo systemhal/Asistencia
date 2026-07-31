@@ -2477,24 +2477,7 @@ function switchAdminTab(targetTab) {
 }
 window.switchAdminTab = switchAdminTab;
 
-function setupAdminTabs() {
-  const tabButtons = document.querySelectorAll('.btn-admin-tab');
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const targetTab = btn.getAttribute('data-tab');
-      if (targetTab) switchAdminTab(targetTab);
-    });
-  });
 
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.btn-admin-tab');
-    if (btn) {
-      const targetTab = btn.getAttribute('data-tab');
-      if (targetTab) switchAdminTab(targetTab);
-    }
-  });
-}
 
 /* ==========================================================================
    TOAST NOTIFICATION ENGINE
@@ -3611,22 +3594,37 @@ function updateReportEmployeeSelect() {
   }
 }
 
-// Obtener el historial completo consolidado desde el cache local
+// Obtener el historial completo consolidado desde el cache local (Optimizado O(N))
 function getAllCachedHistory() {
   const history = [];
+  const seenKeys = new Set();
+  
   Object.keys(employeesDatabase).forEach(dni => {
+    const cleanEmpDni = String(dni).replace(/'/g, '').trim();
     if (attendanceState[dni] && Array.isArray(attendanceState[dni].history)) {
       attendanceState[dni].history.forEach(item => {
-        const itemWithDni = { ...item, dni: item.dni || dni };
-        const exists = history.some(h => 
-          h.dni === itemWithDni.dni && h.timestamp === itemWithDni.timestamp && h.action === itemWithDni.action
-        );
-        if (!exists) {
-          history.push(itemWithDni);
+        const itemDni = String(item.dni || cleanEmpDni).replace(/'/g, '').trim();
+        const key = `${itemDni}_${item.timestamp}_${item.action}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          history.push({ ...item, dni: itemDni });
         }
       });
     }
   });
+
+  if (Array.isArray(globalLogs)) {
+    globalLogs.forEach(item => {
+      const cleanDni = String(item.dni || '').replace(/'/g, '').trim();
+      if (!cleanDni) return;
+      const key = `${cleanDni}_${item.timestamp}_${item.action}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        history.push({ ...item, dni: cleanDni });
+      }
+    });
+  }
+
   return history;
 }
 
@@ -9156,44 +9154,7 @@ function getWeekOfYear(dateObj) {
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
-function getAllCachedHistory() {
-  const history = [];
-  
-  Object.keys(employeesDatabase).forEach(dni => {
-    const cleanEmpDni = String(dni).replace(/'/g, '').trim();
-    if (attendanceState[dni] && Array.isArray(attendanceState[dni].history)) {
-      attendanceState[dni].history.forEach(item => {
-        const itemDni = String(item.dni || cleanEmpDni).replace(/'/g, '').trim();
-        const itemWithDni = { ...item, dni: itemDni };
-        const exists = history.some(h => 
-          String(h.dni).replace(/'/g, '').trim() === itemWithDni.dni && 
-          h.timestamp === itemWithDni.timestamp && 
-          h.action === itemWithDni.action
-        );
-        if (!exists) {
-          history.push(itemWithDni);
-        }
-      });
-    }
-  });
 
-  if (Array.isArray(globalLogs)) {
-    globalLogs.forEach(item => {
-      const cleanDni = String(item.dni || '').replace(/'/g, '').trim();
-      if (!cleanDni) return;
-      const exists = history.some(h => 
-        String(h.dni).replace(/'/g, '').trim() === cleanDni && 
-        h.timestamp === item.timestamp && 
-        h.action === item.action
-      );
-      if (!exists) {
-        history.push({ ...item, dni: cleanDni });
-      }
-    });
-  }
-
-  return history;
-}
 
 function isEmployeeFlexibleSchedule(emp) {
   if (!emp) return false;
@@ -9386,8 +9347,9 @@ function renderValidationsView() {
             let statusTag = '';
             let isTardanzaEfectiva = false;
 
-            if (minsLate > 10) {
-              dictamen = `Exceso >10m (${minsLate} min)`;
+            const tolThreshold = (typeof tardinessTolerance === 'number' && tardinessTolerance > 0) ? tardinessTolerance : 10;
+            if (minsLate > tolThreshold) {
+              dictamen = `Exceso >${tolThreshold}m (${minsLate} min)`;
               statusTag = 'exceeded';
               isTardanzaEfectiva = true;
             } else {
