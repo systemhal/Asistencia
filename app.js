@@ -2671,18 +2671,26 @@ function autoClosePendingSessions() {
     if (!state || !state.history || state.history.length === 0) return;
 
     // Ordenar historial para encontrar la marca más reciente
-    state.history.sort((a, b) => a.timestamp - b.timestamp);
+    state.history.sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0));
     const lastLog = state.history[state.history.length - 1];
     const lastDateNorm = normalizeDateStr(lastLog.dateStr);
 
     // No procesar si:
-    // 1) La última acción ya es Salida
-    // 2) La última marca es de hoy
-    // 3) Esta sesión (dni + fecha) ya fue autocerrada antes
+    // 1) La marca más reciente es de hoy
+    // 2) Esta sesión (dni + fecha) ya fue procesada antes
     const alreadyKey = `${dni}_${lastDateNorm}`;
-    if (lastLog.action === 'Salida') return;
     if (lastDateNorm === normToday) return;
     if (alreadyClosed[alreadyKey]) return;
+
+    // Verificar si YA EXISTE cualquier registro de Salida para esta fecha (ej. 18:09:10)
+    const hasExitOnDate = state.history.some(item => 
+      normalizeDateStr(item.dateStr) === lastDateNorm && item.action === 'Salida'
+    );
+    if (hasExitOnDate) {
+      alreadyClosed[alreadyKey] = true;
+      return;
+    }
+
 
     const dateParts = lastLog.dateStr.split('/');
     if (dateParts.length !== 3) return;

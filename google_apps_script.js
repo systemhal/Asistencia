@@ -505,18 +505,20 @@ function getHistoryData(ss, filterDni) {
   return history;
 }
 
-// ── SISTEMA DE SINCRONIZACIÓN EN LA PESTAÑA "HORARIOS" ────────────────────
+// ── SISTEMA DE SINCRONIZACIÓN EN LA PESTAÑA "HORARIOS" (OPTIMIZADO BATCH) ──
 
 function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
   var sheet = ss.getSheetByName("Horarios");
   if (!sheet) return;
   
-  // 1. Primero, eliminar todas las filas existentes de este DNI en "Horarios"
-  // Buscamos en columna A (por si acaso quedó el formato horizontal anterior) y columna B (DNI oficial en formato vertical)
+  // 1. Filtrar filas en memoria sin hacer deleteRow individual
   var data = sheet.getDataRange().getValues();
-  for (var i = data.length - 1; i > 0; i--) {
-    if (getSafeDni(data[i][0]) === String(employeeId) || String(data[i][1]) === String(employeeId)) {
-      sheet.deleteRow(i + 1);
+  var newData = [data[0]]; // Conservar cabeceras
+  var empIdStr = String(employeeId).trim();
+
+  for (var i = 1; i < data.length; i++) {
+    if (getSafeDni(data[i][0]) !== empIdStr && getSafeDni(data[i][1]) !== empIdStr) {
+      newData.push(data[i]);
     }
   }
   
@@ -524,11 +526,7 @@ function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
   var sched = {};
   var isFlexible = (weeklySchedule === "flexible");
   if (!isFlexible && weeklySchedule) {
-    try {
-      sched = JSON.parse(weeklySchedule);
-    } catch(e) {
-      sched = {};
-    }
+    try { sched = JSON.parse(weeklySchedule); } catch(e) { sched = {}; }
   }
   
   var daysOrder = [
@@ -541,7 +539,7 @@ function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
     { key: "0", label: "Domingo" }
   ];
   
-  // 3. Escribir las 7 nuevas filas para el colaborador
+  // 3. Preparar las 7 nuevas filas en memoria
   for (var j = 0; j < daysOrder.length; j++) {
     var dayObj = daysOrder[j];
     var timeStr = "";
@@ -554,13 +552,11 @@ function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
       var daySched = sched[dayObj.key];
       if (daySched) {
         if (daySched.isRestDay) {
-          timeStr = ""; // Celda en blanco para días de descanso en Entrada - Salida
+          timeStr = "";
           hours = 0;
         } else {
           timeStr = (daySched.workStart || "09:00") + " - " + (daySched.workEnd || "18:00");
-          if (daySched.nobreak) {
-            timeStr += " (S/B)";
-          }
+          if (daySched.nobreak) timeStr += " (S/B)";
           hours = daySched.expectedHours !== undefined ? Number(daySched.expectedHours) : 8;
         }
       } else {
@@ -569,7 +565,7 @@ function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
       }
     }
     
-    sheet.appendRow([
+    newData.push([
       dayObj.label,        // A: Día
       String(employeeId),  // B: DNI
       String(name),        // C: Nombre Completo
@@ -577,6 +573,10 @@ function updateHorariosSheet(ss, employeeId, name, weeklySchedule) {
       hours                // E: Hrs
     ]);
   }
+
+  // 4. Reescribir la hoja en 1 sola llamada en bloque en vez de 7 llamadas
+  sheet.clearContents();
+  sheet.getRange(1, 1, newData.length, 5).setValues(newData);
 }
 
 function deleteFromHorariosSheet(ss, employeeId) {
@@ -584,9 +584,26 @@ function deleteFromHorariosSheet(ss, employeeId) {
   if (!sheet) return;
   
   var data = sheet.getDataRange().getValues();
-  for (var i = data.length - 1; i > 0; i--) {
-    if (getSafeDni(data[i][0]) === String(employeeId) || getSafeDni(data[i][1]) === String(employeeId)) {
-      sheet.deleteRow(i + 1);
+  var newData = [data[0]];
+  var empIdStr = String(employeeId).trim();
+
+  for (var i = 1; i < data.length; i++) {
+    if (getSafeDni(data[i][0]) !== empIdStr && getSafeDni(data[i][1]) !== empIdStr) {
+      newData.push(data[i]);
     }
   }
+
+  sheet.clearContents();
+  if (newData.length > 0) {
+    sheet.getRange(1, 1, newData.length, 5).setValues(newData);
+  }
 }
+
+// ── ACTIVADOR PARA MANTENER EL SERVIDOR DESPIERTO (KEEP ALIVE - EVITA COLD STARTS) ──
+function keepAliveTrigger() {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty("API_KEY");
+  Logger.log("[KeepAlive] Servidor Apps Script despierto y listo. API Key activa: " + (key ? "SI" : "DEFAULT"));
+}
+
+
