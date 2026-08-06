@@ -54,7 +54,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260805_v108">
+  <link rel="stylesheet" href="styles.css?v=20260805_v110">
+
+
 
 
 
@@ -493,29 +495,37 @@
               </div>
             </div>
 
-            <!-- Filtros de fecha diario -->
+            <!-- Filtros de fecha diario (2 filas organizadas) -->
             <div class="gerencial-filters-bar card-inner no-print daily-filter-bar" id="daily-filter-bar">
-              <div class="gerencial-filters-group">
-                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
-                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
+              <!-- FILA 1: Selección de Fecha -->
+              <div class="daily-row-1">
+                <div class="gerencial-filters-group">
+                  <span class="material-symbols-rounded" style="color: var(--primary); font-size: 18px;">tune</span>
+                  <span style="font-weight: 600; font-size: 0.85rem;">Filtros</span>
+                </div>
+                <div class="gerencial-filters-group">
+                  <label class="gerencial-filter-label" for="daily-select-date">Seleccionar Fecha</label>
+                  <input type="date" id="daily-select-date" class="gerencial-input">
+                </div>
               </div>
-              <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label" for="daily-select-date">Seleccionar Fecha</label>
-                <input type="date" id="daily-select-date" class="gerencial-input">
+
+              <!-- FILA 2: Botones de Acción Horizontales -->
+              <div class="daily-row-2">
+                <button id="btn-filter-daily" class="btn-primary">
+                  <span class="material-symbols-rounded">filter_list</span>
+                  <span>Procesar</span>
+                </button>
+                <button id="btn-export-daily-excel" class="btn-outline">
+                  <span class="material-symbols-rounded">download</span>
+                  <span>Exportar Excel</span>
+                </button>
+                <button id="btn-export-daily-pdf" class="btn-outline">
+                  <span class="material-symbols-rounded">print</span>
+                  <span>Imprimir / PDF</span>
+                </button>
               </div>
-              <button id="btn-filter-daily" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">filter_list</span>
-                <span>Procesar</span>
-              </button>
-              <button id="btn-export-daily-excel" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">download</span>
-                <span>Exportar Excel</span>
-              </button>
-              <button id="btn-export-daily-pdf" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
-                <span>Imprimir / PDF</span>
-              </button>
             </div>
+
 
             <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5;">
               Este cuadro resume la asistencia de todo el personal en el día seleccionado, detallando las horas reales de entrada/salida, break, trabajo real, tardanzas e incidencias.
@@ -1575,29 +1585,37 @@
               </div>
             </div>
 
-            <!-- Filtros de mes -->
+            <!-- Filtros de mes (2 filas organizadas) -->
             <div class="gerencial-filters-bar card-inner no-print monthly-filter-bar" id="monthly-filter-bar">
-              <div class="gerencial-filters-group">
-                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">tune</span>
-                <span style="font-weight: 600; font-size: 0.95rem;">Filtros</span>
+              <!-- FILA 1: Selección de Mes -->
+              <div class="monthly-row-1">
+                <div class="gerencial-filters-group">
+                  <span class="material-symbols-rounded" style="color: var(--primary); font-size: 18px;">tune</span>
+                  <span style="font-weight: 600; font-size: 0.85rem;">Filtros</span>
+                </div>
+                <div class="gerencial-filters-group">
+                  <label class="gerencial-filter-label" for="monthly-select-month">Seleccionar Mes</label>
+                  <input type="month" id="monthly-select-month" class="gerencial-input">
+                </div>
               </div>
-              <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label" for="monthly-select-month">Seleccionar Mes</label>
-                <input type="month" id="monthly-select-month" class="gerencial-input">
+
+              <!-- FILA 2: Botones de Acción Horizontales -->
+              <div class="monthly-row-2">
+                <button id="btn-filter-monthly" class="btn-primary">
+                  <span class="material-symbols-rounded">filter_list</span>
+                  <span>Procesar</span>
+                </button>
+                <button id="btn-export-monthly-excel" class="btn-outline">
+                  <span class="material-symbols-rounded">download</span>
+                  <span>Exportar Excel</span>
+                </button>
+                <button id="btn-export-monthly-pdf" class="btn-outline">
+                  <span class="material-symbols-rounded">print</span>
+                  <span>Imprimir / PDF</span>
+                </button>
               </div>
-              <button id="btn-filter-monthly" class="btn-primary" style="padding: 8px 18px; font-size: 0.85rem;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">filter_list</span>
-                <span>Procesar</span>
-              </button>
-              <button id="btn-export-monthly-excel" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">download</span>
-                <span>Exportar Excel</span>
-              </button>
-              <button id="btn-export-monthly-pdf" class="btn-outline" style="padding: 8px 18px; font-size: 0.85rem;">
-                <span class="material-symbols-rounded" style="font-size: 18px;">print</span>
-                <span>Imprimir / PDF</span>
-              </button>
             </div>
+
 
             <p style="margin-bottom: 20px; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5;">
               Este cuadro resume la asistencia del mes seleccionado, detallando horas trabajadas, la suma de minutos de tardanzas, el conteo de inasistencias (excluyendo días de descanso y feriados) y el exceso de refrigerios.
@@ -2171,7 +2189,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <!-- Script Principal de la Aplicación -->
-  <script src="app.js?v=20260805_v108"></script>
+  <script src="app.js?v=20260805_v110"></script>
+
+
 
 
 

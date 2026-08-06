@@ -1974,74 +1974,139 @@ input::-webkit-calendar-picker-indicator:hover {
   border-color: var(--primary);
 }
 
-/* ─── BARRAS DE FILTROS EN 2 FILAS UNIVERSALES (ESCRITORIO Y MÓVIL) ─── */
-.consolidated-filter-bar,
-.report-filter-bar,
-.val-filter-bar {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 10px !important;
-  padding: 12px 16px !important;
-  margin-bottom: 16px !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
+/* ─── DESKTOP (≥ 993px): TODAS LAS BARRAS EN 1 SOLA FILA HORIZONTAL ─── */
+@media (min-width: 993px) {
+  .daily-filter-bar,
+  .consolidated-filter-bar,
+  .monthly-filter-bar,
+  .report-filter-bar,
+  .val-filter-bar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 14px !important;
+    padding: 12px 18px !important;
+    margin-bottom: 20px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .daily-row-1,
+  .daily-row-2,
+  .consolidated-row-1,
+  .consolidated-row-2,
+  .monthly-row-1,
+  .monthly-row-2,
+  .report-row-1,
+  .report-row-2,
+  .val-row-1,
+  .val-row-2 {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: auto !important;
+  }
+
+  .daily-row-2 button,
+  .consolidated-row-2 button,
+  .monthly-row-2 button,
+  .report-row-2 button,
+  .val-row-2 button {
+    flex: 0 0 auto !important;
+    height: 38px !important;
+    font-size: 0.85rem !important;
+    padding: 0 16px !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
 }
 
-/* FILA 1: Fechas y Selección */
-.consolidated-row-1,
-.report-row-1,
-.val-row-1 {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  gap: 10px !important;
-  width: 100% !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: none !important;
-}
-.consolidated-row-1::-webkit-scrollbar,
-.report-row-1::-webkit-scrollbar,
-.val-row-1::-webkit-scrollbar { display: none !important; }
+/* ─── MOBILE (≤ 992px): TODAS LAS BARRAS EN 2 FILAS ORGANIZADAS ─── */
+@media (max-width: 992px) {
+  .daily-filter-bar,
+  .consolidated-filter-bar,
+  .monthly-filter-bar,
+  .report-filter-bar,
+  .val-filter-bar {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+    margin-bottom: 14px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
 
-/* FILA 2: Botones de Acción (Filtrar, Exportar Excel, Imprimir/PDF) */
-.consolidated-row-2,
-.report-row-2,
-.val-row-2 {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  gap: 10px !important;
-  width: 100% !important;
+  .daily-row-1,
+  .consolidated-row-1,
+  .monthly-row-1,
+  .report-row-1,
+  .val-row-1 {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+  .daily-row-1::-webkit-scrollbar,
+  .consolidated-row-1::-webkit-scrollbar,
+  .monthly-row-1::-webkit-scrollbar,
+  .report-row-1::-webkit-scrollbar,
+  .val-row-1::-webkit-scrollbar { display: none !important; }
+
+  .daily-row-2,
+  .consolidated-row-2,
+  .monthly-row-2,
+  .report-row-2,
+  .val-row-2 {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .daily-row-2 button,
+  .consolidated-row-2 button,
+  .monthly-row-2 button,
+  .report-row-2 button {
+    flex: 1 1 0 !important;
+    height: 36px !important;
+    font-size: 0.78rem !important;
+    padding: 0 6px !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+  }
+
+  .val-row-2 button {
+    height: 36px !important;
+    font-size: 0.78rem !important;
+    padding: 0 10px !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
 }
 
-.consolidated-row-2 button,
-.report-row-2 button {
-  flex: 1 1 0 !important;
-  height: 36px !important;
-  font-size: 0.82rem !important;
-  padding: 0 12px !important;
-  justify-content: center !important;
-  white-space: nowrap !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  border-radius: var(--radius-sm) !important;
-}
 
-.val-row-2 button {
-  height: 36px !important;
-  font-size: 0.82rem !important;
-  padding: 0 14px !important;
-  white-space: nowrap !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  flex-shrink: 0 !important;
-}
 
 
 /* KPI Grid */
