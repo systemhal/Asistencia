@@ -1974,6 +1974,76 @@ input::-webkit-calendar-picker-indicator:hover {
   border-color: var(--primary);
 }
 
+/* ─── BARRAS DE FILTROS EN 2 FILAS UNIVERSALES (ESCRITORIO Y MÓVIL) ─── */
+.consolidated-filter-bar,
+.report-filter-bar,
+.val-filter-bar {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  padding: 12px 16px !important;
+  margin-bottom: 16px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* FILA 1: Fechas y Selección */
+.consolidated-row-1,
+.report-row-1,
+.val-row-1 {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+}
+.consolidated-row-1::-webkit-scrollbar,
+.report-row-1::-webkit-scrollbar,
+.val-row-1::-webkit-scrollbar { display: none !important; }
+
+/* FILA 2: Botones de Acción (Filtrar, Exportar Excel, Imprimir/PDF) */
+.consolidated-row-2,
+.report-row-2,
+.val-row-2 {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+.consolidated-row-2 button,
+.report-row-2 button {
+  flex: 1 1 0 !important;
+  height: 36px !important;
+  font-size: 0.82rem !important;
+  padding: 0 12px !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.val-row-2 button {
+  height: 36px !important;
+  font-size: 0.82rem !important;
+  padding: 0 14px !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+
 /* KPI Grid */
 .gerencial-kpi-grid {
   display: grid;
