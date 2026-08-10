@@ -309,6 +309,13 @@ function applyTheme(theme) {
   icons.forEach(iconEl => {
     iconEl.textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
   });
+
+  if (typeof cachedHistoricalMatrixData !== 'undefined' && cachedHistoricalMatrixData.length > 0 && typeof renderHistoricalTrendChart === 'function') {
+    const histWrapper = document.getElementById('report-historical-results-wrapper');
+    if (histWrapper && histWrapper.style.display !== 'none') {
+      renderHistoricalTrendChart(cachedHistoricalMatrixData);
+    }
+  }
 }
 
 // Load state from LocalStorage to keep simulation persistent
@@ -2472,9 +2479,14 @@ function switchAdminTab(targetTab) {
   } else if (targetTab === 'monthly') {
     if (typeof loadMonthlyReport === 'function') loadMonthlyReport();
   } else if (targetTab === 'reports') {
-
-    const select = document.getElementById('select-report-employee');
-    if (select && select.value && typeof renderAgentReport === 'function') renderAgentReport(select.value);
+    if (typeof populateHistoricalEmployeesDropdown === 'function') populateHistoricalEmployeesDropdown();
+    const btnHist = document.getElementById('btn-mode-historical-report');
+    if (btnHist && btnHist.classList.contains('active')) {
+      if (typeof loadHistoricalMultiMonthReport === 'function') loadHistoricalMultiMonthReport();
+    } else {
+      const select = document.getElementById('select-report-employee');
+      if (select && select.value && typeof renderAgentReport === 'function') renderAgentReport(select.value);
+    }
   } else if (targetTab === 'gerencial') {
     if (typeof renderGerencialView === 'function') renderGerencialView();
   } else if (targetTab === 'validations') {
@@ -3773,14 +3785,16 @@ function renderReportTable(history, employee) {
         groupedByDate[item.dateStr].push(item);
       });
 
-      // Ordenar fechas descendente
-      const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+      // Ordenar fechas cronológicamente ascendente para cálculo de tolerancias semanales
+      const sortedDatesAsc = Object.keys(groupedByDate).sort((a, b) => {
         const partsA = a.split('/');
         const partsB = b.split('/');
-        const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
-        const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
-        return dateB - dateA;
+        return new Date(partsA[2], partsA[1] - 1, partsA[0]) - new Date(partsB[2], partsB[1] - 1, partsB[0]);
       });
+
+      const july12026 = new Date(2026, 6, 1, 0, 0, 0);
+      const weeklyTolerance = {};
+      const effectiveTardyMap = {};
 
       // Calcular Totales
       let totalWorkedSecs = 0;
@@ -3789,21 +3803,48 @@ function renderReportTable(history, employee) {
       let totalBreakSecs = 0;
       let totalDiffSecs = 0;
 
-      const empReports = [];
-      sortedDates.forEach(dateStr => {
+      sortedDatesAsc.forEach(dateStr => {
         const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
         const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
-        empReports.push({ dateStr, report });
+
+        const parts = dateStr.split('/');
+        const dObj = parts.length === 3 ? new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])) : null;
+        
+        let effectiveTardy = report.tardinessSeconds || 0;
+        let isTolerated = false;
+
+        if (effectiveTardy > 0 && dObj && dObj >= july12026) {
+          const minsLate = Math.floor(effectiveTardy / 60);
+          const wNum = getWeekOfYear(dObj);
+          const weekKey = `${dObj.getFullYear()}-W${wNum}`;
+          if (typeof weeklyTolerance[weekKey] === 'undefined') {
+            weeklyTolerance[weekKey] = 0;
+          }
+
+          if (minsLate <= 10) {
+            weeklyTolerance[weekKey]++;
+            if (weeklyTolerance[weekKey] <= 2) {
+              effectiveTardy = 0;
+              isTolerated = true;
+            }
+          }
+        }
+
+        effectiveTardyMap[dateStr] = {
+          effectiveTardy,
+          isTolerated,
+          report
+        };
 
         totalWorkedSecs += report.workedSeconds;
-        totalTardySecs += report.tardinessSeconds;
+        totalTardySecs += effectiveTardy;
         totalOvertimeSecs += report.horasAdicionalesSeconds;
         totalBreakSecs += report.breakSeconds;
         totalDiffSecs += report.diffSeconds;
       });
 
       // Añadir fila resumen del colaborador (Colapsada por defecto)
-      const scheduledBreakStr = `	h${emp.breakStart || "13:00"} - ${emp.breakEnd || "14:00"}`.replace('\t', '');
+      const scheduledBreakStr = `\th${emp.breakStart || "13:00"} - ${emp.breakEnd || "14:00"}`.replace('\t', '');
       const summaryTr = document.createElement('tr');
       summaryTr.classList.add('summary-row');
       summaryTr.setAttribute('data-emp-dni', empDni);
@@ -3831,11 +3872,26 @@ function renderReportTable(history, employee) {
       `;
       tbody.appendChild(summaryTr);
 
-      // Renderizar días individuales (Ocultos por defecto)
-      empReports.forEach(({ dateStr, report }) => {
+      // Renderizar días individuales en orden descendente
+      const sortedDatesDesc = Object.keys(groupedByDate).sort((a, b) => {
+        const partsA = a.split('/');
+        const partsB = b.split('/');
+        return new Date(partsB[2], partsB[1] - 1, partsB[0]) - new Date(partsA[2], partsA[1] - 1, partsA[0]);
+      });
+
+      sortedDatesDesc.forEach(dateStr => {
+        const itemData = effectiveTardyMap[dateStr] || {};
+        const report = itemData.report || {};
+        const effectiveTardy = itemData.effectiveTardy || 0;
+        const isTolerated = itemData.isTolerated || false;
+
         const excessBreakBadge = report.hasExcessBreak 
           ? `<span class="badge-excess-break"><span class="material-symbols-rounded">warning</span>Exceso: ${report.excessBreakMinutes}m</span>` 
           : '';
+
+        const tardinessCellHtml = isTolerated
+          ? `<span style="color: var(--accent-emerald, #10b981); font-weight: 600; font-size: 0.75rem;" title="Tolerancia semanal aplicada (<=10m)">00:00:00 (Tol.)</span>`
+          : (effectiveTardy > 0 ? `<span style="color: #ff4d4d; font-weight: 600;">${formatSecondsToHHMMSS(effectiveTardy)}</span>` : '00:00:00');
 
         const tr = document.createElement('tr');
         tr.classList.add(`history-row-emp-${empDni}`);
@@ -3843,11 +3899,11 @@ function renderReportTable(history, employee) {
         tr.innerHTML = `
           <td style="font-weight: 600; padding-left: 24px;">${dateStr}</td>
           <td class="table-timestamp text-center" style="white-space: nowrap;">${report.entradaReal}${getDeviceIconShortHTML(report.entradaDevice)}</td>
-          <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
+          <td class="text-center" style="white-space: nowrap;">${tardinessCellHtml}</td>
           <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
           <td class="table-timestamp text-center" style="white-space: nowrap;">${report.salidaReal}${getDeviceIconShortHTML(report.salidaDevice)}</td>
           <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
-          <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}${excessBreakBadge}</td>
+          <td class="text-center" style="white-space: nowrap;">${report.breakSeconds > 0 ? formatSecondsToHHMMSS(report.breakSeconds) : '00:00:00'}<!--=-->${excessBreakBadge}</td>
           <td class="text-center" style="font-weight: 600; color: var(--text-primary); white-space: nowrap;">${report.workedSeconds > 0 ? formatSecondsToHHMMSS(report.workedSeconds) : '00:00:00'}</td>
           <td class="text-center" style="white-space: nowrap;">
             <span class="${report.diffClass}">${report.status}</span>
@@ -3865,26 +3921,60 @@ function renderReportTable(history, employee) {
       groupedByDate[item.dateStr].push(item);
     });
 
-    const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+    // Ordenar fechas cronológicamente ascendente para cálculo correcto de tolerancias semanales
+    const sortedDatesAsc = Object.keys(groupedByDate).sort((a, b) => {
       const partsA = a.split('/');
       const partsB = b.split('/');
-      const dateA = new Date(partsA[2], partsA[1] - 1, partsA[0]);
-      const dateB = new Date(partsB[2], partsB[1] - 1, partsB[0]);
-      return dateB - dateA;
+      return new Date(partsA[2], partsA[1] - 1, partsA[0]) - new Date(partsB[2], partsB[1] - 1, partsB[0]);
     });
 
-    // Calcular Totales individuales
+    // Calcular Totales individuales con reglas de tolerancia semanal a partir de Julio 2026
+    const july12026 = new Date(2026, 6, 1, 0, 0, 0);
+    const weeklyTolerance = {};
+    const effectiveTardyMap = {};
+
     let totalWorkedSecs = 0;
     let totalTardySecs = 0;
     let totalOvertimeSecs = 0;
     let totalBreakSecs = 0;
     let totalDiffSecs = 0;
 
-    sortedDates.forEach(dateStr => {
+    sortedDatesAsc.forEach(dateStr => {
       const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
       const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+      
+      const parts = dateStr.split('/');
+      const dObj = parts.length === 3 ? new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])) : null;
+      
+      let effectiveTardy = report.tardinessSeconds || 0;
+      let isTolerated = false;
+
+      if (effectiveTardy > 0 && dObj && dObj >= july12026) {
+        const minsLate = Math.floor(effectiveTardy / 60);
+        const wNum = getWeekOfYear(dObj);
+        const weekKey = `${dObj.getFullYear()}-W${wNum}`;
+        if (typeof weeklyTolerance[weekKey] === 'undefined') {
+          weeklyTolerance[weekKey] = 0;
+        }
+
+        if (minsLate <= 10) {
+          weeklyTolerance[weekKey]++;
+          if (weeklyTolerance[weekKey] <= 2) {
+            effectiveTardy = 0;
+            isTolerated = true;
+          }
+        }
+      }
+
+      effectiveTardyMap[dateStr] = {
+        effectiveTardy,
+        isTolerated,
+        originalTardy: report.tardinessSeconds || 0,
+        report
+      };
+
       totalWorkedSecs += report.workedSeconds;
-      totalTardySecs += report.tardinessSeconds;
+      totalTardySecs += effectiveTardy;
       totalOvertimeSecs += report.horasAdicionalesSeconds;
       totalBreakSecs += report.breakSeconds;
       totalDiffSecs += report.diffSeconds;
@@ -3914,21 +4004,33 @@ function renderReportTable(history, employee) {
     `;
     tbody.innerHTML = summaryRowHtml;
 
-    // Renderizar registros individuales
-    sortedDates.forEach(dateStr => {
-      const dayMarks = groupedByDate[dateStr].sort((a, b) => a.timestamp - b.timestamp);
-      const report = calculateWorkedTimesForDate(dayMarks, employee, dateStr);
+    // Renderizar registros individuales (orden descendente)
+    const sortedDatesDesc = Object.keys(groupedByDate).sort((a, b) => {
+      const partsA = a.split('/');
+      const partsB = b.split('/');
+      return new Date(partsB[2], partsB[1] - 1, partsB[0]) - new Date(partsA[2], partsA[1] - 1, partsA[0]);
+    });
+
+    sortedDatesDesc.forEach(dateStr => {
+      const itemData = effectiveTardyMap[dateStr] || {};
+      const report = itemData.report || {};
+      const effectiveTardy = itemData.effectiveTardy || 0;
+      const isTolerated = itemData.isTolerated || false;
       
       const excessBreakBadge = report.hasExcessBreak 
         ? `<span class="badge-excess-break"><span class="material-symbols-rounded">warning</span>Exceso: ${report.excessBreakMinutes}m</span>` 
         : '';
 
+      const tardinessCellHtml = isTolerated
+        ? `<span style="color: var(--accent-emerald, #10b981); font-weight: 600; font-size: 0.75rem;" title="Tolerancia semanal aplicada (<=10m)">00:00:00 (Tol.)</span>`
+        : (effectiveTardy > 0 ? `<span style="color: #ff4d4d; font-weight: 600;">${formatSecondsToHHMMSS(effectiveTardy)}</span>` : '00:00:00');
+
       const tr = document.createElement('tr');
-      tr.classList.add(`history-row-emp-${employee.dni}`); // agregamos clase para poder colapsar individual también
+      tr.classList.add(`history-row-emp-${employee.dni}`);
       tr.innerHTML = `
         <td style="font-weight: 600; padding-left: 24px;">${dateStr}</td>
         <td class="table-timestamp text-center" style="white-space: nowrap;">${report.entradaReal}${getDeviceIconShortHTML(report.entradaDevice)}</td>
-        <td class="text-center" style="white-space: nowrap; ${report.tardinessSeconds > 0 ? 'color: #ff4d4d; font-weight: 600;' : ''}">${report.tardinessSeconds > 0 ? formatSecondsToHHMMSS(report.tardinessSeconds) : '00:00:00'}</td>
+        <td class="text-center" style="white-space: nowrap;">${tardinessCellHtml}</td>
         <td class="text-center" style="white-space: nowrap;">${report.breakReal}</td>
         <td class="table-timestamp text-center" style="white-space: nowrap;">${report.salidaReal}${getDeviceIconShortHTML(report.salidaDevice)}</td>
         <td class="text-center" style="white-space: nowrap;">${report.horasAdicionalesSeconds > 0 ? formatSecondsToHHMMSS(report.horasAdicionalesSeconds) : '00:00:00'}</td>
@@ -4139,6 +4241,8 @@ function renderConsolidatedTable(history) {
     let totalAbsentCount = 0;
     const dateValuesMap = {};
     const dateCellsMap = {};
+    const july12026 = new Date(2026, 6, 1, 0, 0, 0);
+    const weeklyTolerance = {};
 
     sortedDates.forEach(dateStr => {
       const dayMarks = dataMap[dni] && dataMap[dni][dateStr] ? dataMap[dni][dateStr] : null;
@@ -4161,11 +4265,12 @@ function renderConsolidatedTable(history) {
 
       let daySched = null;
       let dayOfWeek = 1;
+      let dObj = null;
       if (dateParts.length === 3) {
         const day = parseInt(dateParts[0], 10);
         const month = parseInt(dateParts[1], 10) - 1;
         const year = parseInt(dateParts[2], 10);
-        const dObj = new Date(year, month, day);
+        dObj = new Date(year, month, day);
         if (!isNaN(dObj.getTime())) {
           dayOfWeek = dObj.getDay();
         }
@@ -4209,12 +4314,43 @@ function renderConsolidatedTable(history) {
         let cellText = formatSecondsToHHMMSS(report.workedSeconds);
         let cellClass = 'cell-assisted';
         
-        if (report.tardiness) {
-          totalTardinessCount++;
-          totalTardinessSeconds += report.tardinessSeconds;
-          const tardMins = Math.floor(report.tardinessSeconds / 60);
-          tooltip += `\nTardanza: ${tardMins} min`;
-          cellClass = 'cell-tardiness';
+        if (report.tardiness || report.tardinessSeconds > 0) {
+          const tardMins = Math.floor((report.tardinessSeconds || 0) / 60);
+
+          if (dObj && dObj >= july12026) {
+            const wNum = getWeekOfYear(dObj);
+            const weekKey = `${dObj.getFullYear()}-W${wNum}`;
+            if (typeof weeklyTolerance[weekKey] === 'undefined') {
+              weeklyTolerance[weekKey] = 0;
+            }
+
+            let isTardanzaEfectiva = false;
+            if (tardMins > 10) {
+              isTardanzaEfectiva = true;
+            } else {
+              weeklyTolerance[weekKey]++;
+              if (weeklyTolerance[weekKey] <= 2) {
+                isTardanzaEfectiva = false;
+              } else {
+                isTardanzaEfectiva = true;
+              }
+            }
+
+            if (isTardanzaEfectiva) {
+              totalTardinessCount++;
+              totalTardinessSeconds += report.tardinessSeconds;
+              tooltip += `\nTardanza Efectiva: ${tardMins} min`;
+              cellClass = 'cell-tardiness';
+            } else {
+              tooltip += `\nTolerancia Semanal (${tardMins} min - Día ${weeklyTolerance[weekKey]}/2)`;
+              cellClass = 'cell-assisted';
+            }
+          } else {
+            totalTardinessCount++;
+            totalTardinessSeconds += report.tardinessSeconds;
+            tooltip += `\nTardanza: ${tardMins} min`;
+            cellClass = 'cell-tardiness';
+          }
         }
         
         dateCellsMap[dateStr] = `<td class="${cellClass}" title="${tooltip}">${cellText}</td>`;
@@ -6067,6 +6203,9 @@ function renderMonthlyTable(history) {
       schedObj = {};
     }
 
+    const isJuly2026OrLater = (year > 2026 || (year === 2026 && monthIndex >= 6));
+    const weeklyTolerance = {};
+
     for (let day = 1; day <= totalDaysInMonth; day++) {
       const dateStr = `${String(day).padStart(2, '0')}/${String(monthIndex + 1).padStart(2, '0')}/${year}`;
       const dayStr = String(day).padStart(2, '0');
@@ -6117,8 +6256,7 @@ function renderMonthlyTable(history) {
         if (isWorkday) {
           diasAsistidos++;
           
-          if (report.tardiness) {
-            tardanzasCount++;
+          if (report.tardiness || report.tardinessSeconds > 0) {
             const actualEntrySec = timeStrToSeconds(report.entradaReal);
             let schedEntry = "08:00";
             if (schedObj[dayOfWeek] && schedObj[dayOfWeek].workStart) {
@@ -6130,8 +6268,36 @@ function renderMonthlyTable(history) {
             }
             const scheduledEntrySec = timeStrToSeconds(schedEntry);
             const diff = actualEntrySec - scheduledEntrySec;
+            const minsLate = Math.max(0, Math.floor(diff / 60));
+
             if (diff > 0) {
-              tardanzasSeconds += diff;
+              if (isJuly2026OrLater) {
+                const wNum = getWeekOfYear(d);
+                const weekKey = `${year}-W${wNum}`;
+                if (typeof weeklyTolerance[weekKey] === 'undefined') {
+                  weeklyTolerance[weekKey] = 0;
+                }
+
+                let isTardanzaEfectiva = false;
+                if (minsLate > 10) {
+                  isTardanzaEfectiva = true;
+                } else {
+                  weeklyTolerance[weekKey]++;
+                  if (weeklyTolerance[weekKey] <= 2) {
+                    isTardanzaEfectiva = false;
+                  } else {
+                    isTardanzaEfectiva = true;
+                  }
+                }
+
+                if (isTardanzaEfectiva) {
+                  tardanzasCount++;
+                  tardanzasSeconds += diff;
+                }
+              } else {
+                tardanzasCount++;
+                tardanzasSeconds += diff;
+              }
             }
           }
 
@@ -7971,6 +8137,9 @@ function loadGerencialReport() {
 
   const todayYMD = toLocalYMD(new Date());
 
+  const july12026 = new Date(2026, 6, 1, 0, 0, 0);
+  const gerWeeklyTolerance = {};
+
   // Por cada día del calendario y colaborador calcular asistencia, tardanza y horas
   allCalendarDays.forEach(dateStr => {
     const parts = dateStr.split('/');
@@ -8022,9 +8191,36 @@ function loadGerencialReport() {
         }
         const report = calculateWorkedTimesForDate(dayMarks, emp, dateStr);
         perEmployee[dni].workedSecs += report.workedSeconds;
-        if (report.tardiness) {
-          perEmployee[dni].late++;
-          perEmployee[dni].tardanzaSecs += report.tardinessSeconds;
+        
+        if (report.tardiness || report.tardinessSeconds > 0) {
+          if (dObj >= july12026) {
+            const minsLate = Math.floor((report.tardinessSeconds || 0) / 60);
+            const wNum = getWeekOfYear(dObj);
+            const weekKey = `${dni}|${dObj.getFullYear()}-W${wNum}`;
+            if (typeof gerWeeklyTolerance[weekKey] === 'undefined') {
+              gerWeeklyTolerance[weekKey] = 0;
+            }
+
+            let isTardanzaEfectiva = false;
+            if (minsLate > 10) {
+              isTardanzaEfectiva = true;
+            } else {
+              gerWeeklyTolerance[weekKey]++;
+              if (gerWeeklyTolerance[weekKey] <= 2) {
+                isTardanzaEfectiva = false;
+              } else {
+                isTardanzaEfectiva = true;
+              }
+            }
+
+            if (isTardanzaEfectiva) {
+              perEmployee[dni].late++;
+              perEmployee[dni].tardanzaSecs += report.tardinessSeconds;
+            }
+          } else {
+            perEmployee[dni].late++;
+            perEmployee[dni].tardanzaSecs += report.tardinessSeconds;
+          }
         }
       } else if (scheduled) {
         // Ausente en día programado — verificar si hoy ya terminó o es un día pasado
@@ -9733,3 +9929,963 @@ function exportValidationsReportExcel() {
 
   showToast('success', 'Exportación Completa', 'Reporte de Validaciones exportado en formato CSV Excel.');
 }
+
+// =========================================================================
+// 📈 MÓDULO DE EVOLUCIÓN HISTÓRICA MULTIMES (TARDANZAS, FALTAS Y ACUMULADOS)
+// =========================================================================
+
+let cachedHistoricalChartInstance = null;
+let cachedHistoricalMatrixData = [];
+let isHistoricalSubModeActive = false;
+
+// Helper de parseo de tiempo seguro a segundos
+function parseTimeToSecondsSafe(timeStr) {
+  if (!timeStr) return 0;
+  const parts = String(timeStr).split(':');
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  const s = parseInt(parts[2], 10) || 0;
+  return h * 3600 + m * 60 + s;
+}
+
+// Helper de formato de minutos a "Xh YYm"
+function formatMinutesToHoursFriendly(totalMins) {
+  if (!totalMins || totalMins <= 0) return '0h 00m';
+  const hrs = Math.floor(totalMins / 60);
+  const mins = Math.round(totalMins % 60);
+  return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+}
+
+// 1. Alternar Sub-Modos en Pestaña Reportes (Detalle Diario vs Histórico Multimes)
+function switchReportSubMode(mode) {
+  const btnDaily = document.getElementById('btn-mode-daily-report');
+  const btnHist = document.getElementById('btn-mode-historical-report');
+  const dailyDatesGroup = document.getElementById('filter-group-daily-dates');
+  const histPeriodGroup = document.getElementById('filter-group-historical-period');
+  const histCustomGroup = document.getElementById('hist-custom-months-group');
+  const btnFilterText = document.getElementById('btn-filter-report-text');
+  const dailyResults = document.getElementById('report-daily-results-wrapper');
+  const histResults = document.getElementById('report-historical-results-wrapper');
+
+  if (mode === 'daily') {
+    isHistoricalSubModeActive = false;
+    if (btnDaily) {
+      btnDaily.classList.add('active');
+      btnDaily.style.background = '#ffffff';
+      btnDaily.style.color = 'var(--primary, #4f46e5)';
+      btnDaily.style.fontWeight = '700';
+      btnDaily.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+      btnDaily.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.06)';
+    }
+    if (btnHist) {
+      btnHist.classList.remove('active');
+      btnHist.style.background = 'transparent';
+      btnHist.style.color = '#64748b';
+      btnHist.style.fontWeight = '600';
+      btnHist.style.borderColor = 'transparent';
+      btnHist.style.boxShadow = 'none';
+    }
+    if (dailyDatesGroup) dailyDatesGroup.style.display = 'flex';
+    if (histPeriodGroup) histPeriodGroup.style.display = 'none';
+    if (histCustomGroup) histCustomGroup.style.display = 'none';
+    if (btnFilterText) btnFilterText.textContent = 'Filtrar';
+    if (dailyResults) {
+      dailyResults.classList.remove('hidden');
+      dailyResults.style.display = 'block';
+    }
+    if (histResults) {
+      histResults.classList.add('hidden');
+      histResults.style.display = 'none';
+    }
+
+    const btnExportExcel = document.getElementById('btn-export-agent-excel');
+    const btnExportPdf = document.getElementById('btn-export-agent-pdf');
+    if (btnExportExcel) {
+      btnExportExcel.classList.remove('hidden-btn');
+      btnExportExcel.style.setProperty('display', 'inline-flex', 'important');
+    }
+    if (btnExportPdf) {
+      btnExportPdf.classList.remove('hidden-btn');
+      btnExportPdf.style.setProperty('display', 'inline-flex', 'important');
+    }
+
+    populateReportEmployeesDropdown(false);
+  } else {
+    isHistoricalSubModeActive = true;
+    if (btnDaily) {
+      btnDaily.classList.remove('active');
+      btnDaily.style.background = 'transparent';
+      btnDaily.style.color = '#64748b';
+      btnDaily.style.fontWeight = '600';
+      btnDaily.style.borderColor = 'transparent';
+      btnDaily.style.boxShadow = 'none';
+    }
+    if (btnHist) {
+      btnHist.classList.add('active');
+      btnHist.style.background = '#ffffff';
+      btnHist.style.color = 'var(--primary, #4f46e5)';
+      btnHist.style.fontWeight = '700';
+      btnHist.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+      btnHist.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.06)';
+    }
+    if (dailyDatesGroup) dailyDatesGroup.style.display = 'none';
+    if (histPeriodGroup) histPeriodGroup.style.display = 'flex';
+    if (btnFilterText) btnFilterText.textContent = 'Procesar Histórico';
+    
+    // Ocultar botones Exportar Excel / PDF de la barra superior en modo Histórico con !important
+    const btnExportExcel = document.getElementById('btn-export-agent-excel');
+    const btnExportPdf = document.getElementById('btn-export-agent-pdf');
+    if (btnExportExcel) {
+      btnExportExcel.classList.add('hidden-btn');
+      btnExportExcel.style.setProperty('display', 'none', 'important');
+    }
+    if (btnExportPdf) {
+      btnExportPdf.classList.add('hidden-btn');
+      btnExportPdf.style.setProperty('display', 'none', 'important');
+    }
+
+    if (dailyResults) {
+      dailyResults.classList.add('hidden');
+      dailyResults.style.display = 'none';
+    }
+    if (histResults) {
+      histResults.classList.remove('hidden');
+      histResults.style.display = 'block';
+    }
+
+    handleHistoricalPeriodChange();
+    populateReportEmployeesDropdown(true);
+    loadHistoricalMultiMonthReport();
+  }
+}
+
+// 2. Control de Fechas Personalizadas en Periodo Histórico
+function handleHistoricalPeriodChange() {
+  const periodSelect = document.getElementById('select-historical-period');
+  const customGroup = document.getElementById('hist-custom-months-group');
+  if (!periodSelect || !customGroup) return;
+
+  if (periodSelect.value === 'custom') {
+    customGroup.style.display = 'flex';
+
+    const startInput = document.getElementById('hist-start-month');
+    const endInput = document.getElementById('hist-end-month');
+    const now = new Date();
+    if (startInput && !startInput.value) {
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      startInput.value = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}`;
+    }
+    if (endInput && !endInput.value) {
+      endInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+  } else {
+    customGroup.style.display = 'none';
+  }
+}
+
+// 3. Poblar Desplegable de Colaboradores (con soporte para "Todos" en modo histórico)
+function populateReportEmployeesDropdown(includeAll = false) {
+  const select = document.getElementById('select-report-employee');
+  if (!select) return;
+  const currentVal = select.value;
+
+  select.innerHTML = '';
+  if (includeAll) {
+    const optAll = document.createElement('option');
+    optAll.value = 'ALL';
+    optAll.textContent = '👥 Todos los Colaboradores';
+    select.appendChild(optAll);
+  } else {
+    const optPlaceholder = document.createElement('option');
+    optPlaceholder.value = '';
+    optPlaceholder.disabled = true;
+    optPlaceholder.selected = true;
+    optPlaceholder.hidden = true;
+    optPlaceholder.textContent = 'Seleccionar colaborador...';
+    select.appendChild(optPlaceholder);
+  }
+
+  const staffList = Object.values(employeesDatabase || {}).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  staffList.forEach(emp => {
+    const opt = document.createElement('option');
+    opt.value = emp.dni;
+    opt.textContent = `${emp.name} (DNI: ${emp.dni})`;
+    select.appendChild(opt);
+  });
+
+  if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+    select.value = currentVal;
+  } else if (includeAll) {
+    select.value = 'ALL';
+  }
+}
+
+// 4. Motor Principal de Agregación Histórica Multimes
+function loadHistoricalMultiMonthReport() {
+  const empSelect = document.getElementById('select-report-employee');
+  const periodSelect = document.getElementById('select-historical-period');
+  const selectedDNI = empSelect ? empSelect.value : 'ALL';
+  const periodType = periodSelect ? periodSelect.value : '6months';
+
+  // 1. Determinar colaboradores a evaluar
+  let targetEmployees = [];
+  if (!selectedDNI || selectedDNI === 'ALL') {
+    targetEmployees = Object.values(employeesDatabase || {});
+  } else if (employeesDatabase[selectedDNI]) {
+    targetEmployees = [employeesDatabase[selectedDNI]];
+  }
+
+  if (targetEmployees.length === 0) {
+    showToast('warning', 'Sin colaboradores', 'No se encontraron colaboradores registrados.');
+    return;
+  }
+
+  // Actualizar Título y Badge
+  const badge = document.getElementById('hist-agent-badge');
+  const subtitle = document.getElementById('hist-report-subtitle');
+  if (badge) {
+    badge.textContent = (!selectedDNI || selectedDNI === 'ALL')
+      ? '👥 Todos los Colaboradores'
+      : `${targetEmployees[0].name} (${targetEmployees[0].dni})`;
+  }
+
+  // 2. Extraer todas las marcas de todos los colaboradores
+  const collectedMarks = [];
+  targetEmployees.forEach(emp => {
+    const empDni = String(emp.dni || '').trim();
+    
+    // De attendanceState
+    const stateHistory = (attendanceState[empDni] && Array.isArray(attendanceState[empDni].history)) ? attendanceState[empDni].history : [];
+    stateHistory.forEach(item => {
+      collectedMarks.push({
+        dni: empDni,
+        empName: emp.name,
+        dateStr: normalizeDateStr(item.dateStr || item.date || ''),
+        timeStr: normalizeTimeStr(item.timeStr || item.time || ''),
+        action: item.action || '',
+        timestamp: item.timestamp || 0
+      });
+    });
+
+    // Del array global history si existe
+    if (typeof history !== 'undefined' && Array.isArray(history)) {
+      history.forEach(item => {
+        if (String(item.dni || '').trim() === empDni) {
+          collectedMarks.push({
+            dni: empDni,
+            empName: emp.name,
+            dateStr: normalizeDateStr(item.dateStr || item.date || ''),
+            timeStr: normalizeTimeStr(item.timeStr || item.time || ''),
+            action: item.action || '',
+            timestamp: item.timestamp || 0
+          });
+        }
+      });
+    }
+  });
+
+  // Deduplicar marcas
+  const uniqueMarksMap = new Map();
+  collectedMarks.forEach(m => {
+    if (m.dateStr && m.timeStr && m.action) {
+      const key = `${m.dni}_${m.dateStr}_${m.timeStr}_${m.action}`;
+      if (!uniqueMarksMap.has(key)) {
+        uniqueMarksMap.set(key, m);
+      }
+    }
+  });
+
+  const allMarks = Array.from(uniqueMarksMap.values());
+
+  // 3. Extraer todos los meses presentes en los datos
+  const allMonthsSet = new Set();
+  allMarks.forEach(m => {
+    const p = m.dateStr.split('/');
+    if (p.length === 3) {
+      const y = parseInt(p[2], 10);
+      const mNum = parseInt(p[1], 10);
+      if (y > 2000 && mNum >= 1 && mNum <= 12) {
+        allMonthsSet.add(`${y}-${String(mNum).padStart(2, '0')}`);
+      }
+    }
+  });
+
+  const now = new Date();
+  let startYearMonth = '';
+  let endYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  if (periodType === '3months') {
+    const d3 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    startYearMonth = `${d3.getFullYear()}-${String(d3.getMonth() + 1).padStart(2, '0')}`;
+    if (subtitle) subtitle.textContent = 'Periodo Analizado: Últimos 3 Meses';
+  } else if (periodType === '6months') {
+    const d6 = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    startYearMonth = `${d6.getFullYear()}-${String(d6.getMonth() + 1).padStart(2, '0')}`;
+    if (subtitle) subtitle.textContent = 'Periodo Analizado: Últimos 6 Meses';
+  } else if (periodType === 'year') {
+    const d12 = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    startYearMonth = `${d12.getFullYear()}-${String(d12.getMonth() + 1).padStart(2, '0')}`;
+    if (subtitle) subtitle.textContent = 'Periodo Analizado: Último Año (12 Meses)';
+  } else if (periodType === 'custom') {
+    const startIn = document.getElementById('hist-start-month')?.value;
+    const endIn = document.getElementById('hist-end-month')?.value;
+    startYearMonth = startIn || `${now.getFullYear()}-01`;
+    endYearMonth = endIn || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (subtitle) subtitle.textContent = `Periodo Analizado: Personalizado (${startYearMonth} a ${endYearMonth})`;
+  } else {
+    // 'all' -> Todo el Histórico
+    const sortedMonths = Array.from(allMonthsSet).sort();
+    if (sortedMonths.length > 0) {
+      startYearMonth = sortedMonths[0];
+    } else {
+      startYearMonth = `${now.getFullYear()}-01`;
+    }
+    if (subtitle) subtitle.textContent = 'Periodo Analizado: Todo el Histórico Disponible';
+  }
+
+  // Generar lista de meses cronológicos
+  const monthList = [];
+  let [curY, curM] = startYearMonth.split('-').map(Number);
+  const [endY, endM] = endYearMonth.split('-').map(Number);
+
+  while (curY < endY || (curY === endY && curM <= endM)) {
+    monthList.push(`${curY}-${String(curM).padStart(2, '0')}`);
+    curM++;
+    if (curM > 12) {
+      curM = 1;
+      curY++;
+    }
+  }
+
+  const monthNamesEs = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
+  // 4. Calcular métricas mes a mes
+  cachedHistoricalMatrixData = [];
+  let grandTotalTardinessMinutes = 0;
+  let grandTotalTardinessCount = 0;
+  let grandTotalAbsencesCount = 0;
+  let grandTotalWorkDays = 0;
+  let grandTotalJustifications = 0;
+  let grandTotalEffectiveSeconds = 0;
+
+  // Umbral oficial de entrada en vigencia de las reglas de tolerancia (01/07/2026)
+  const july12026 = new Date(2026, 6, 1, 0, 0, 0);
+  const weeklyToleranceByEmp = {};
+
+  monthList.forEach(ym => {
+    const [yNum, mNum] = ym.split('-').map(Number);
+    const monthLabel = `${monthNamesEs[mNum - 1]} ${yNum}`;
+    const daysInMonth = new Date(yNum, mNum, 0).getDate();
+
+    let monthWorkDays = 0;
+    let monthTardinessCount = 0;
+    let monthTardinessSeconds = 0;
+    let monthAbsencesCount = 0;
+    let monthJustifications = 0;
+    let monthEffectiveSeconds = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dStr = String(day).padStart(2, '0');
+      const mStr = String(mNum).padStart(2, '0');
+      const dayDateStr = `${dStr}/${mStr}/${yNum}`;
+      const dayMonth = `${dStr}/${mStr}`;
+      const dateObj = new Date(yNum, mNum - 1, day);
+      const isPastOrToday = dateObj <= now;
+      const dayOfWeek = dateObj.getDay();
+
+      // 1. Feriados (Estáticos y Registrados en BD)
+      const isStaticHoliday = GLOBAL_FERIADOS.includes(dayMonth);
+      const customHoliday = (feriadosDatabase || []).find(f => normalizeDateStr(f.dateStr) === dayDateStr);
+      const isHoliday = isStaticHoliday || !!customHoliday;
+
+      targetEmployees.forEach(emp => {
+        const cleanDni = String(emp.dni || '').replace(/'/g, '').trim();
+
+        // 2. Días de Descanso Semanal según Horario del Colaborador
+        let isRestDay = false;
+        if (emp.weeklySchedule && emp.weeklySchedule !== 'flexible' && emp.weeklySchedule !== '') {
+          try {
+            let sched = emp.weeklySchedule;
+            if (typeof sched === 'string') sched = JSON.parse(sched);
+            if (sched && sched[dayOfWeek]) {
+              isRestDay = !!sched[dayOfWeek].isRestDay;
+            }
+          } catch(e) {}
+        } else {
+          isRestDay = (dayOfWeek === 0);
+        }
+
+        // 3. Revisar Justificaciones, Vacaciones, Sanciones y Licencias
+        const justif = (justificacionesDatabase || []).find(j => {
+          const jDni = String(j.dni || '').replace(/'/g, '').trim();
+          const jDate = normalizeDateStr(j.dateStr || j.date || '');
+          return jDni === cleanDni && (jDate === dayDateStr || jDate === `${yNum}-${mStr}-${dStr}`);
+        });
+
+        // 4. Marcas de Asistencia de este día
+        const dayMarks = allMarks.filter(m => String(m.dni).trim() === cleanDni && m.dateStr === dayDateStr);
+        const hasIngreso = dayMarks.some(m => (m.action || '').toLowerCase() === 'ingreso');
+
+        if (dayMarks.length > 0 && hasIngreso) {
+          monthWorkDays++;
+          
+          let minsLate = 0;
+          let tardinessSecs = 0;
+
+          if (typeof calculateWorkedTimesForDate === 'function') {
+            const report = calculateWorkedTimesForDate(dayMarks, emp, dayDateStr);
+            if (report) {
+              minsLate = Math.max(0, Math.floor((report.tardinessSeconds || 0) / 60));
+              tardinessSecs = report.tardinessSeconds || 0;
+              monthEffectiveSeconds += (report.workedSeconds || (8 * 3600));
+            } else {
+              monthEffectiveSeconds += (8 * 3600);
+            }
+          } else {
+            const entry = dayMarks.find(m => (m.action || '').toLowerCase() === 'ingreso');
+            if (entry) {
+              const entrySecs = parseTimeToSecondsSafe(entry.timeStr);
+              const schedStartSecs = parseTimeToSecondsSafe(emp.workStart || "09:00");
+              if (entrySecs > schedStartSecs) {
+                minsLate = Math.max(0, Math.floor((entrySecs - schedStartSecs) / 60));
+                tardinessSecs = (entrySecs - schedStartSecs);
+              }
+            }
+            monthEffectiveSeconds += (8 * 3600);
+          }
+
+          if (minsLate > 0) {
+            const isTardinessJustified = justif && (justif.type === 'Permiso por Horas' || String(justif.type).toLowerCase().includes('tardanza'));
+
+            if (!isTardinessJustified) {
+              // Si la fecha es a partir de Julio 2026: Aplicar regla de tolerancia semanal
+              if (dateObj >= july12026) {
+                const wNum = getWeekOfYear(dateObj);
+                const weekKey = `${cleanDni}|${dateObj.getFullYear()}-W${wNum}`;
+                if (typeof weeklyToleranceByEmp[weekKey] === 'undefined') {
+                  weeklyToleranceByEmp[weekKey] = 0;
+                }
+
+                let isTardanzaEfectiva = false;
+                if (minsLate > 10) {
+                  // Excede los 10 minutos -> Tardanza Efectiva directa
+                  isTardanzaEfectiva = true;
+                } else {
+                  // Retraso dentro de los 10 minutos (1 a 10 min)
+                  weeklyToleranceByEmp[weekKey]++;
+                  if (weeklyToleranceByEmp[weekKey] <= 2) {
+                    // Hasta 2 días de tolerancia en la semana -> Tolerado (no computa como tardanza efectiva)
+                    isTardanzaEfectiva = false;
+                  } else {
+                    // Supera los 2 días de tolerancia en la semana -> Tardanza Efectiva
+                    isTardanzaEfectiva = true;
+                  }
+                }
+
+                if (isTardanzaEfectiva) {
+                  monthTardinessCount++;
+                  monthTardinessSeconds += tardinessSecs;
+                }
+              } else {
+                // Antes de Julio 2026: Registro histórico de tardanza estándar TAL CUAL
+                monthTardinessCount++;
+                monthTardinessSeconds += tardinessSecs;
+              }
+            }
+          }
+        } else if (isPastOrToday && !isRestDay && !isHoliday) {
+          if (justif) {
+            // Permiso Justificado, Vacaciones, Sanción Disciplinaria o Descanso Médico
+            monthJustifications++;
+          } else {
+            // Falta Injustificada TAL CUAL
+            monthAbsencesCount++;
+          }
+        }
+      });
+    }
+
+    const monthTardinessMinutes = Math.round(monthTardinessSeconds / 60);
+
+    // Semáforo de Disciplina
+    let semaforoClass = 'badge-discipline-optimo';
+    let semaforoText = '🟢 Óptimo';
+
+    if (monthWorkDays === 0 && monthAbsencesCount === 0 && monthJustifications === 0) {
+      semaforoClass = 'badge-discipline-optimo';
+      semaforoText = '⚪ Sin Registro';
+    } else if (monthAbsencesCount >= 1 || monthTardinessCount >= 4 || monthTardinessMinutes >= 45) {
+      semaforoClass = 'badge-discipline-critico';
+      semaforoText = '🔴 Crítico';
+    } else if (monthTardinessCount >= 2 || monthTardinessMinutes >= 20) {
+      semaforoClass = 'badge-discipline-regular';
+      semaforoText = '🟡 Regular';
+    }
+
+    const avgLate = monthTardinessCount > 0 ? Math.round(monthTardinessMinutes / monthTardinessCount) : 0;
+    const effectiveHoursFormatted = `${Math.floor(monthEffectiveSeconds / 3600)}h ${Math.round((monthEffectiveSeconds % 3600) / 60)}m`;
+
+    cachedHistoricalMatrixData.push({
+      yearMonth: ym,
+      monthLabel: monthLabel,
+      workDays: monthWorkDays,
+      tardinessCount: monthTardinessCount,
+      tardinessMinutes: monthTardinessMinutes,
+      tardinessTimeFormatted: formatMinutesToHoursFriendly(monthTardinessMinutes),
+      avgTardinessMinutes: avgLate,
+      absencesCount: monthAbsencesCount,
+      justificationsCount: monthJustifications,
+      effectiveHours: effectiveHoursFormatted,
+      semaforoClass: semaforoClass,
+      semaforoText: semaforoText
+    });
+
+    grandTotalTardinessMinutes += monthTardinessMinutes;
+    grandTotalTardinessCount += monthTardinessCount;
+    grandTotalAbsencesCount += monthAbsencesCount;
+    grandTotalWorkDays += monthWorkDays;
+    grandTotalJustifications += monthJustifications;
+    grandTotalEffectiveSeconds += monthEffectiveSeconds;
+  });
+
+  // 5. Renderizar Tarjetas KPI Globales
+  const totalTardinessTimeEl = document.getElementById('kpi-hist-total-tardiness-time');
+  const tardinessRateEl = document.getElementById('kpi-hist-tardiness-rate');
+  const countTardinessEl = document.getElementById('kpi-hist-count-tardiness');
+  const tardinessPctEl = document.getElementById('kpi-hist-tardiness-pct');
+  const countAbsencesEl = document.getElementById('kpi-hist-count-absences');
+  const punctualityScoreEl = document.getElementById('kpi-hist-punctuality-score');
+  const disciplineStatusEl = document.getElementById('kpi-hist-discipline-status');
+
+  const monthsCount = monthList.length || 1;
+  const avgMinsPerMonth = Math.round(grandTotalTardinessMinutes / monthsCount);
+
+  if (totalTardinessTimeEl) totalTardinessTimeEl.textContent = formatMinutesToHoursFriendly(grandTotalTardinessMinutes);
+  if (tardinessRateEl) tardinessRateEl.textContent = `Promedio: ${avgMinsPerMonth} min/mes`;
+  if (countTardinessEl) countTardinessEl.textContent = `${grandTotalTardinessCount} veces`;
+  if (tardinessPctEl) tardinessPctEl.textContent = `En ${monthsCount} meses evaluados`;
+  if (countAbsencesEl) countAbsencesEl.textContent = `${grandTotalAbsencesCount} días`;
+
+  const punctualityPct = grandTotalWorkDays > 0 ? Math.max(0, Math.round(((grandTotalWorkDays - grandTotalTardinessCount) / grandTotalWorkDays) * 100)) : 100;
+  if (punctualityScoreEl) punctualityScoreEl.textContent = `${punctualityPct}%`;
+
+  if (disciplineStatusEl) {
+    if (punctualityPct >= 95 && grandTotalAbsencesCount === 0) {
+      disciplineStatusEl.textContent = '🟢 Desempeño Excelente';
+      disciplineStatusEl.style.color = '#10b981';
+    } else if (punctualityPct >= 85 && grandTotalAbsencesCount <= 1) {
+      disciplineStatusEl.textContent = '🟡 Desempeño Regular';
+      disciplineStatusEl.style.color = '#f59e0b';
+    } else {
+      disciplineStatusEl.textContent = '🔴 Atención Requerida';
+      disciplineStatusEl.style.color = '#ef4444';
+    }
+  }
+
+  // 6. Renderizar Gráfico de Tendencia Histórica
+  renderHistoricalTrendChart(cachedHistoricalMatrixData);
+
+  // 7. Renderizar Tabla Matriz con Desglose Anual y Mensual
+  const tbody = document.getElementById('admin-historical-matrix-tbody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    if (cachedHistoricalMatrixData.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding: 30px;">No se encontraron registros para el periodo seleccionado.</td></tr>`;
+      return;
+    }
+
+    // Agrupar meses por Año (ej. 2026, 2025)
+    const yearsMap = new Map();
+    cachedHistoricalMatrixData.forEach(row => {
+      const year = row.yearMonth.split('-')[0];
+      if (!yearsMap.has(year)) {
+        yearsMap.set(year, []);
+      }
+      yearsMap.get(year).push(row);
+    });
+
+    yearsMap.forEach((monthsInYear, year) => {
+      // Calcular totales acumulados del año
+      let yWorkDays = 0;
+      let yTardinessCount = 0;
+      let yTardinessMinutes = 0;
+      let yAbsencesCount = 0;
+      let yJustificationsCount = 0;
+      let yEffectiveSeconds = 0;
+
+      monthsInYear.forEach(m => {
+        yWorkDays += m.workDays;
+        yTardinessCount += m.tardinessCount;
+        yTardinessMinutes += m.tardinessMinutes;
+        yAbsencesCount += m.absencesCount;
+        yJustificationsCount += m.justificationsCount;
+        yEffectiveSeconds += (m.workDays * 8 * 3600);
+      });
+
+      const yAvgTardiness = yTardinessCount > 0 ? Math.round(yTardinessMinutes / yTardinessCount) : 0;
+      const yTimeFormatted = formatMinutesToHoursFriendly(yTardinessMinutes);
+      const yHoursFormatted = `${Math.floor(yEffectiveSeconds / 3600)}h 00m`;
+
+      let ySemaforoClass = 'badge-discipline-optimo';
+      let ySemaforoText = '🟢 Óptimo';
+      if (yAbsencesCount >= 3 || yTardinessCount >= 10 || yTardinessMinutes >= 120) {
+        ySemaforoClass = 'badge-discipline-critico';
+        ySemaforoText = '🔴 Crítico';
+      } else if (yTardinessCount >= 5 || yTardinessMinutes >= 45) {
+        ySemaforoClass = 'badge-discipline-regular';
+        ySemaforoText = '🟡 Regular';
+      }
+
+      // Fila Cabecera del Año (Desplegable y Clickeable)
+      const yearTr = document.createElement('tr');
+      yearTr.classList.add('hist-year-header-row');
+      yearTr.setAttribute('data-year', year);
+      yearTr.style.background = 'rgba(99, 102, 241, 0.08)';
+      yearTr.style.cursor = 'pointer';
+      yearTr.style.borderLeft = '4px solid var(--primary, #4f46e5)';
+      yearTr.style.fontWeight = '700';
+
+      yearTr.innerHTML = `
+        <td style="color: var(--text-primary); font-size: 0.92rem;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-rounded hist-year-chevron-${year}" style="color: var(--primary); font-size: 22px; transition: transform 0.2s ease;">expand_more</span>
+            <span style="font-weight: 800;">Año ${year}</span>
+            <span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; background: rgba(99, 102, 241, 0.15); color: var(--primary, #4f46e5); font-weight: 700;">${monthsInYear.length} ${monthsInYear.length === 1 ? 'mes' : 'meses'}</span>
+          </div>
+        </td>
+        <td class="text-center font-bold" style="color: var(--text-primary);">${yWorkDays} días</td>
+        <td class="text-center font-bold" style="color: ${yTardinessCount > 0 ? '#f59e0b' : 'var(--text-primary)'};">${yTardinessCount} veces</td>
+        <td class="text-center font-bold" style="color: var(--primary, #4f46e5); font-size: 0.95rem;">${yTimeFormatted}</td>
+        <td class="text-center font-bold">${yAvgTardiness > 0 ? `+${yAvgTardiness} min` : '0 min'}</td>
+        <td class="text-center font-bold" style="color: ${yAbsencesCount > 0 ? '#ef4444' : 'var(--text-muted)'};">${yAbsencesCount} faltas</td>
+        <td class="text-center font-bold">${yJustificationsCount}</td>
+        <td class="text-center font-bold">${yHoursFormatted}</td>
+        <td class="text-center">
+          <span class="${ySemaforoClass}">${ySemaforoText}</span>
+        </td>
+      `;
+
+      yearTr.addEventListener('click', () => {
+        toggleHistoricalYear(year);
+      });
+      tbody.appendChild(yearTr);
+
+      // Filas Hijas (Meses del Año)
+      monthsInYear.forEach(row => {
+        const monthTr = document.createElement('tr');
+        monthTr.classList.add('hist-month-child-row', `hist-year-child-${year}`);
+        monthTr.style.transition = 'all 0.2s ease';
+
+        monthTr.innerHTML = `
+          <td style="font-weight: 600; color: var(--text-primary); padding-left: 36px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="color: var(--text-muted); font-size: 18px;">subdirectory_arrow_right</span>
+              <span>${row.monthLabel}</span>
+            </div>
+          </td>
+          <td class="text-center font-medium">${row.workDays} días</td>
+          <td class="text-center font-bold" style="color: ${row.tardinessCount > 0 ? '#f59e0b' : 'var(--text-primary)'};">
+            ${row.tardinessCount} ${row.tardinessCount === 1 ? 'vez' : 'veces'}
+          </td>
+          <td class="text-center font-bold" style="color: var(--primary, #4f46e5); font-size: 0.9rem;">${row.tardinessTimeFormatted}</td>
+          <td class="text-center font-medium">${row.avgTardinessMinutes > 0 ? `+${row.avgTardinessMinutes} min` : '0 min'}</td>
+          <td class="text-center font-bold" style="color: ${row.absencesCount > 0 ? '#ef4444' : 'var(--text-muted)'};">
+            ${row.absencesCount} ${row.absencesCount === 1 ? 'falta' : 'faltas'}
+          </td>
+          <td class="text-center font-medium">${row.justificationsCount}</td>
+          <td class="text-center font-medium">${row.effectiveHours}</td>
+          <td class="text-center">
+            <span class="${row.semaforoClass}">${row.semaforoText}</span>
+          </td>
+        `;
+        tbody.appendChild(monthTr);
+      });
+    });
+  }
+}
+
+// 5. Controles de Desglose / Acordeón de Años
+function toggleHistoricalYear(year) {
+  const childRows = document.querySelectorAll(`.hist-year-child-${year}`);
+  const chevron = document.querySelector(`.hist-year-chevron-${year}`);
+  if (!childRows || childRows.length === 0) return;
+
+  const isCurrentlyHidden = childRows[0].style.display === 'none';
+  childRows.forEach(row => {
+    row.style.display = isCurrentlyHidden ? '' : 'none';
+  });
+
+  if (chevron) {
+    chevron.textContent = isCurrentlyHidden ? 'expand_more' : 'chevron_right';
+  }
+}
+
+function toggleAllHistoricalYears(expand) {
+  const allChildRows = document.querySelectorAll('.hist-month-child-row');
+  const allChevrons = document.querySelectorAll('[class*="hist-year-chevron-"]');
+
+  allChildRows.forEach(row => {
+    row.style.display = expand ? '' : 'none';
+  });
+
+  allChevrons.forEach(ch => {
+    ch.textContent = expand ? 'expand_more' : 'chevron_right';
+  });
+}
+
+// 5. Renderizar Gráfico de Línea y Barras (Chart.js) Theme-Aware
+function renderHistoricalTrendChart(matrixData) {
+  const canvas = document.getElementById('histTrendChart');
+  if (!canvas) return;
+
+  if (cachedHistoricalChartInstance) {
+    cachedHistoricalChartInstance.destroy();
+    cachedHistoricalChartInstance = null;
+  }
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const textColor = isDark ? '#f1f2f6' : '#1e293b';
+  const subTextColor = isDark ? '#94a3b8' : '#64748b';
+  const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(226, 232, 240, 0.7)';
+  const tooltipBg = isDark ? '#0f172a' : '#1e293b';
+  const tooltipBorder = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)';
+
+  const labels = matrixData.map(d => d.monthLabel);
+  const tardinessMinutes = matrixData.map(d => d.tardinessMinutes);
+  const absencesCount = matrixData.map(d => d.absencesCount);
+
+  const ctx = canvas.getContext('2d');
+  cachedHistoricalChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Tiempo de Tardanzas',
+          data: tardinessMinutes,
+          backgroundColor: isDark ? 'rgba(245, 158, 11, 0.75)' : 'rgba(245, 158, 11, 0.65)',
+          borderColor: '#fbbf24',
+          borderWidth: 1.5,
+          borderRadius: 6,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Cantidad de Faltas',
+          data: absencesCount,
+          type: 'line',
+          borderColor: isDark ? '#f87171' : '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.18)',
+          borderWidth: 2.5,
+          pointBackgroundColor: isDark ? '#f87171' : '#ef4444',
+          pointBorderColor: '#ffffff',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          tension: 0.3,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            boxWidth: 14,
+            color: textColor,
+            font: { size: 11.5, weight: '600', family: "'Plus Jakarta Sans', sans-serif" },
+            padding: 15
+          }
+        },
+        tooltip: {
+          backgroundColor: tooltipBg,
+          titleColor: '#ffffff',
+          bodyColor: '#f1f2f6',
+          borderColor: tooltipBorder,
+          borderWidth: 1,
+          titleFont: { size: 12, weight: 'bold' },
+          bodyFont: { size: 11 },
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: function(context) {
+              if (context.dataset.yAxisID === 'y') {
+                const valMins = context.parsed.y || 0;
+                const formattedTime = formatMinutesToHoursFriendly(valMins);
+                return ` Tiempo Tardanza: ${formattedTime} (${valMins.toLocaleString('es-PE')} min)`;
+              } else {
+                const valFaltas = context.parsed.y || 0;
+                return ` Faltas: ${valFaltas} ${valFaltas === 1 ? 'falta' : 'faltas'}`;
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: subTextColor,
+            font: { size: 11, weight: '500' }
+          }
+        },
+        y: {
+          type: 'linear',
+          display: true,
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Tiempo Tardanzas (hh:mm)',
+            color: subTextColor,
+            font: { size: 10.5, weight: '600' }
+          },
+          ticks: {
+            color: subTextColor,
+            font: { size: 10.5 },
+            callback: function(value) {
+              if (value === 0) return '0h';
+              const h = Math.floor(value / 60);
+              const m = Math.round(value % 60);
+              if (m === 0) return `${h}h`;
+              return `${h}h ${m}m`;
+            }
+          },
+          grid: { color: gridColor }
+        },
+        y1: {
+          type: 'linear',
+          display: true,
+          position: 'right',
+          title: {
+            display: true,
+            text: 'Faltas',
+            color: isDark ? '#f87171' : '#ef4444',
+            font: { size: 10.5, weight: '600' }
+          },
+          ticks: {
+            stepSize: 1,
+            color: isDark ? '#f87171' : '#ef4444',
+            font: { size: 10.5 }
+          },
+          grid: { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+}
+
+// 6. Exportación de Evolución Histórica a Excel / CSV
+function exportHistoricalMultiMonthExcel() {
+  if (!cachedHistoricalMatrixData || cachedHistoricalMatrixData.length === 0) {
+    showToast('warning', 'Sin datos', 'No hay datos históricos para exportar.');
+    return;
+  }
+
+  const empSelect = document.getElementById('select-report-employee');
+  const agentLabel = empSelect && empSelect.value !== 'ALL' && employeesDatabase[empSelect.value]
+    ? employeesDatabase[empSelect.value].name
+    : 'Todos_los_Colaboradores';
+
+  let csvContent = "\uFEFF";
+  csvContent += "Mes / Periodo;Dias Laborados;N Tardanzas;Tiempo Acumulado Tardanzas;Tardanza Promedio (min);N Faltas;Permisos Justificados;Horas Efectivas;Semaforo Disciplina\n";
+
+  cachedHistoricalMatrixData.forEach(r => {
+    const line = [
+      `"${r.monthLabel}"`,
+      r.workDays,
+      r.tardinessCount,
+      `"${r.tardinessTimeFormatted}"`,
+      r.avgTardinessMinutes,
+      r.absencesCount,
+      r.justificationsCount,
+      `"${r.effectiveHours}"`,
+      `"${r.semaforoText.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, '').trim()}"`
+    ].join(";");
+    csvContent += line + "\n";
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Evolucion_Historica_Multimes_${agentLabel.replace(/\s+/g, '_')}_${formatDateToInputISO(new Date())}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('success', 'Exportación Exitosa', 'Reporte histórico multimes exportado en formato CSV Excel.');
+}
+
+// 7. Impresión / Exportación a PDF de Evolución Histórica
+function printHistoricalMultiMonthPDF() {
+  window.print();
+}
+
+// 8. Inicialización de Listeners Dinámicos para la Barra Unificada de Reportes
+document.addEventListener('DOMContentLoaded', () => {
+  const btnFilter = document.getElementById('btn-filter-report');
+  const btnExportExcel = document.getElementById('btn-export-agent-excel');
+  const btnExportPDF = document.getElementById('btn-export-agent-pdf');
+  const empSelect = document.getElementById('select-report-employee');
+
+  if (btnFilter) {
+    btnFilter.addEventListener('click', () => {
+      if (isHistoricalSubModeActive) {
+        loadHistoricalMultiMonthReport();
+      } else {
+        const val = empSelect ? empSelect.value : '';
+        if (val) renderAgentReport(val);
+      }
+    });
+  }
+
+  if (btnExportExcel) {
+    btnExportExcel.addEventListener('click', () => {
+      if (isHistoricalSubModeActive) {
+        exportHistoricalMultiMonthExcel();
+      } else {
+        exportAgentReport();
+      }
+    });
+  }
+
+  if (btnExportPDF) {
+    btnExportPDF.addEventListener('click', () => {
+      if (isHistoricalSubModeActive) {
+        printHistoricalMultiMonthPDF();
+      } else {
+        const select = document.getElementById('select-report-employee');
+        if (select && select.value && select.value !== 'all' && employeesDatabase[select.value]) {
+          const emp = employeesDatabase[select.value];
+          const empTitleName = document.getElementById('report-employee-name-display');
+          if (empTitleName) empTitleName.textContent = `${emp.name} (DNI: ${select.value})`;
+          const pName = document.getElementById('print-emp-name');
+          const pDni = document.getElementById('print-emp-dni');
+          const pRole = document.getElementById('print-emp-role');
+          if (pName) pName.textContent = emp.name;
+          if (pDni) pDni.textContent = select.value;
+          if (pRole) pRole.textContent = emp.role || 'Colaborador';
+          window.print();
+        }
+      }
+    });
+  }
+
+  if (empSelect) {
+    empSelect.addEventListener('change', () => {
+      if (isHistoricalSubModeActive) {
+        loadHistoricalMultiMonthReport();
+      } else {
+        if (empSelect.value) renderAgentReport(empSelect.value);
+      }
+    });
+  }
+});
+
+
+

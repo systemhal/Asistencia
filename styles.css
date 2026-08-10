@@ -4626,6 +4626,8 @@ body.light-theme .btn-admin-edit:hover {
     align-items: center !important;
     gap: 4px !important;
     border-radius: var(--radius-sm) !important;
+  }
+
   /* ─── CONTROL DE VALIDACIONES (VAL) FILTERS: EXACTAMENTE 2 FILAS ─── */
   .val-filter-bar {
     display: flex !important;
@@ -4815,4 +4817,264 @@ body.light-theme .btn-admin-edit:hover {
     padding: 0 !important;
   }
 }
+
+/* ─── BOTÓN ESTANDARIZADO DE EXPORTAR EXCEL (VERDE ESMERALDA MODERNO) ─── */
+.btn-excel,
+#btn-export-daily-excel,
+#btn-export-validations,
+#btn-export-agent-excel,
+#btn-export-consolidated-excel,
+#btn-export-monthly-excel,
+button[onclick*="exportHistoricalMultiMonthExcel"] {
+  background: #10b981 !important;
+  background-image: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border: 1px solid #059669 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-sm, 8px) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.28) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+}
+
+.btn-excel:hover,
+#btn-export-daily-excel:hover,
+#btn-export-validations:hover,
+#btn-export-agent-excel:hover,
+#btn-export-consolidated-excel:hover,
+#btn-export-monthly-excel:hover,
+button[onclick*="exportHistoricalMultiMonthExcel"]:hover {
+  background: #059669 !important;
+  background-image: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  border-color: #047857 !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.42) !important;
+  transform: translateY(-1.5px) !important;
+}
+
+.btn-excel:active,
+#btn-export-daily-excel:active,
+#btn-export-validations:active,
+#btn-export-agent-excel:active,
+#btn-export-consolidated-excel:active,
+#btn-export-monthly-excel:active,
+button[onclick*="exportHistoricalMultiMonthExcel"]:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3) !important;
+}
+
+.btn-excel span,
+#btn-export-daily-excel span,
+#btn-export-validations span,
+#btn-export-agent-excel span,
+#btn-export-consolidated-excel span,
+#btn-export-monthly-excel span,
+button[onclick*="exportHistoricalMultiMonthExcel"] span {
+  color: #ffffff !important;
+}
+
+/* ─── SELECTOR DE SUB-MODO REPORTES (SEGMENTED PILL SWITCHER) ─── */
+.report-row-2 button.hidden-btn,
+.report-row-2 .hidden-btn,
+#btn-export-agent-excel.hidden-btn,
+#btn-export-agent-pdf.hidden-btn {
+  display: none !important;
+}
+
+.report-mode-switcher {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 5px !important;
+  background: var(--surface-1, #f1f5f9) !important;
+  border: 1px solid var(--border-color, #cbd5e1) !important;
+  border-radius: var(--radius-md, 12px) !important;
+  margin-bottom: 20px !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  width: fit-content !important;
+}
+
+.btn-report-mode {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 18px !important;
+  border-radius: 9px !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  font-family: var(--font-display, inherit) !important;
+  background: transparent !important;
+  color: var(--text-secondary, #64748b) !important;
+  border: 1px solid transparent !important;
+  cursor: pointer !important;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  user-select: none !important;
+}
+
+.btn-report-mode:hover {
+  color: var(--text-primary, #0f172a) !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+}
+
+.btn-report-mode.active {
+  background: var(--bg-card, #ffffff) !important;
+  color: var(--primary, #4f46e5) !important;
+  font-weight: 700 !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.btn-report-mode.active span.material-symbols-rounded {
+  color: var(--primary, #4f46e5) !important;
+}
+
+/* ─── TARJETAS KPI HISTÓRICAS MULTIMES THEME-AWARE ─── */
+.hist-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 16px !important;
+  margin-bottom: 24px !important;
+  width: 100% !important;
+}
+
+.hist-kpi-card {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 16px 18px !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08) !important;
+  min-height: 86px !important;
+  box-sizing: border-box !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.hist-kpi-icon {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.hist-kpi-icon span {
+  font-size: 24px !important;
+}
+
+.hist-kpi-info {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+.hist-kpi-label {
+  font-size: 0.76rem !important;
+  font-weight: 600 !important;
+  color: var(--text-muted) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.4px !important;
+  margin-bottom: 2px !important;
+  white-space: nowrap !important;
+}
+
+.hist-kpi-value {
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  font-family: var(--font-display) !important;
+  color: var(--text-primary) !important;
+  line-height: 1.2 !important;
+}
+
+.hist-kpi-sub {
+  font-size: 0.74rem !important;
+  color: var(--text-secondary) !important;
+  margin-top: 2px !important;
+  white-space: nowrap !important;
+}
+
+/* YEAR ROW STYLING */
+.hist-year-header-row {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border-left: 4px solid var(--primary) !important;
+  cursor: pointer !important;
+  transition: background 0.2s ease !important;
+}
+
+.hist-year-header-row:hover {
+  background: rgba(99, 102, 241, 0.2) !important;
+}
+
+.hist-month-child-row:hover {
+  background: var(--surface-hover) !important;
+}
+
+/* SEMÁFORO DE DISCIPLINA (TEXTO LIMPIO SIN CUADRO NI BORDES) */
+.badge-discipline-optimo {
+  background: transparent !important;
+  color: #10b981 !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  box-shadow: none !important;
+}
+
+.badge-discipline-regular {
+  background: transparent !important;
+  color: #f59e0b !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  box-shadow: none !important;
+}
+
+.badge-discipline-critico {
+  background: transparent !important;
+  color: #ef4444 !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 992px) {
+  .hist-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .hist-kpi-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 

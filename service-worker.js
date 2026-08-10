@@ -17,8 +17,7 @@
 
 // ── Versión del caché ─────────────────────────────────────────────────────────
 // Cambia este valor cada vez que actualices los archivos del proyecto.
-// Esto fuerza la eliminación del caché antiguo en todos los dispositivos.
-const CACHE_VERSION  = 'asistencia-msi-v1.1.1';
+const CACHE_VERSION  = 'asistencia-msi-v1.3.0';
 
 
 
