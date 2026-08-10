@@ -2654,100 +2654,44 @@ function updatePrintTimestamp() {
 }
 
 function autoClosePendingSessions() {
+  // Las sesiones de días anteriores se resetean localmente a 'Desconectado' 
+  // para que el colaborador pueda marcar 'Ingreso' en el nuevo día.
+  // IMPORTANTE: NUNCA se inyectan marcas ficticias a Google Sheets.
+  // Google Sheets es la fuente de verdad y solo almacena marcas realizadas por colaboradores o administradores.
   let stateChanged = false;
   const today = new Date();
   const todayStr = today.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
   const normToday = normalizeDateStr(todayStr);
 
-  // Registro persistente de sesiones ya cerradas: { dni: 'DD/MM/YYYY' }
-  // Evita re-procesar la misma sesión en cada recarga de página
-  let alreadyClosed = {};
-  try {
-    alreadyClosed = JSON.parse(localStorage.getItem('autoclose_processed') || '{}');
-  } catch(e) { alreadyClosed = {}; }
-
   Object.keys(attendanceState).forEach(dni => {
     const state = attendanceState[dni];
-    if (!state || !state.history || state.history.length === 0) return;
+    if (!state || !state.history || state.history.length === 0) {
+      if (state && state.action !== 'Desconectado') {
+        state.action = 'Desconectado';
+        state.timestamp = null;
+        stateChanged = true;
+      }
+      return;
+    }
 
     // Ordenar historial para encontrar la marca más reciente
     state.history.sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0));
     const lastLog = state.history[state.history.length - 1];
     const lastDateNorm = normalizeDateStr(lastLog.dateStr);
 
-    // No procesar si:
-    // 1) La marca más reciente es de hoy
-    // 2) Esta sesión (dni + fecha) ya fue procesada antes
-    const alreadyKey = `${dni}_${lastDateNorm}`;
-    if (lastDateNorm === normToday) return;
-    if (alreadyClosed[alreadyKey]) return;
-
-    // Verificar si YA EXISTE cualquier registro de Salida para esta fecha (ej. 18:09:10)
-    const hasExitOnDate = state.history.some(item => 
-      normalizeDateStr(item.dateStr) === lastDateNorm && item.action === 'Salida'
-    );
-    if (hasExitOnDate) {
-      alreadyClosed[alreadyKey] = true;
-      return;
+    // Si la última marca no es de hoy y el estado local sigue activo, resetear a Desconectado para hoy
+    if (lastDateNorm !== normToday && state.action !== 'Desconectado') {
+      state.action = 'Desconectado';
+      state.timestamp = null;
+      stateChanged = true;
     }
-
-
-    const dateParts = lastLog.dateStr.split('/');
-    if (dateParts.length !== 3) return;
-
-    const day   = parseInt(dateParts[0], 10);
-    const month = parseInt(dateParts[1], 10) - 1;
-    const year  = parseInt(dateParts[2], 10);
-
-    // Caso 1: Si se quedó en 'Inicio Refrigerio', cerrar refrigerio antes
-    if (lastLog.action === 'Inicio Refrigerio') {
-      const breakTime = new Date(year, month, day, 23, 59, 58);
-      const breakLog = {
-        action: 'Fin Refrigerio',
-        timestamp: breakTime.getTime(),
-        timeStr: '23:59:58',
-        dateStr: lastLog.dateStr,
-        details: 'Autocompletado por omisión',
-        device: 'Sistema'
-      };
-      state.history.push(breakLog);
-      if (googleScriptUrl) {
-        sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Fin Refrigerio', breakTime, true);
-      }
-    }
-
-    // Cerrar jornada a las 23:59:59 del día de la última marca
-    const exitTime = new Date(year, month, day, 23, 59, 59);
-    const exitLog = {
-      action: 'Salida',
-      timestamp: exitTime.getTime(),
-      timeStr: '23:59:59',
-      dateStr: lastLog.dateStr,
-      details: 'Autocompletado por omisión',
-      device: 'Sistema'
-    };
-    state.history.push(exitLog);
-    state.action = 'Salida';
-    state.timestamp = exitTime.getTime();
-
-    if (googleScriptUrl) {
-      sendAttendanceToGoogleSheets(dni, employeesDatabase[dni]?.name || '', 'Salida', exitTime, true);
-    }
-
-    // Marcar como procesado para no repetir en futuras recargas
-    alreadyClosed[alreadyKey] = true;
-    stateChanged = true;
   });
-
-  // Guardar el registro de sesiones ya cerradas
-  try {
-    localStorage.setItem('autoclose_processed', JSON.stringify(alreadyClosed));
-  } catch(e) {}
 
   if (stateChanged) {
     saveState();
   }
 }
+
 
 // Lógica para ELIMINAR a un empleado del sistema (Movida fuera de showToast)
 function deleteEmployee(dni) {
