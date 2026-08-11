@@ -54,7 +54,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260810_v130">
+  <link rel="stylesheet" href="styles.css?v=20260810_v133">
 
 
 
@@ -767,53 +767,61 @@
             </div>
           </div>
 
-          <!-- Panel de Filtros en 2 Filas Ordenadas -->
-          <div class="gerencial-filters-bar card-inner no-print val-filter-bar" id="val-filter-bar" style="display: flex !important; flex-direction: column !important; gap: 8px !important; width: 100% !important;">
-            <!-- FILA 1: Sanción, Colaborador y Tipo Horario -->
-            <div class="val-row-1" style="display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important; width: 100% !important; overflow-x: auto !important; white-space: nowrap !important;">
-              <div class="gerencial-filters-group">
-                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 18px;">tune</span>
-                <span style="font-weight: 600; font-size: 0.85rem;">Filtros</span>
-              </div>
-              <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label" for="val-select-status">Sanción</label>
-                <select id="val-select-status" class="gerencial-select">
-                  <option value="all">Todos los Estados</option>
-                  <option value="Baja Automática">🚨 Baja Automática (Regla 2)</option>
-                  <option value="Causal de Retiro">⛔ Causal de Retiro (Regla 3/4)</option>
-                  <option value="Exceso Tolerancia">⚠️ Exceso Tolerancia (Regla 1)</option>
-                  <option value="En Regla">✅ En Regla</option>
-                </select>
-              </div>
-              <div class="gerencial-filters-group" style="flex: 1; min-width: 180px;">
-                <label class="gerencial-filter-label" for="val-select-employee">Colaborador</label>
-                <select id="val-select-employee" class="gerencial-select" style="width: 100%;">
-                  <option value="all">Todos los Colaboradores</option>
-                </select>
-              </div>
-              <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label" for="val-select-schedule-type">Tipo Horario</label>
-                <select id="val-select-schedule-type" class="gerencial-select">
-                  <option value="all">Todos los Horarios</option>
-                  <option value="fijo">Horario Fijo</option>
-                  <option value="flexible">Horario Flexible</option>
-                </select>
-              </div>
+          <!-- BARRA DE FILTROS EN 1 SOLA FILA HORIZONTAL UNIFICADA (Igual a las demás pestañas) -->
+          <div class="gerencial-filters-bar card-inner no-print val-filter-bar-unified" id="val-filter-bar">
+            <!-- Icono Filtros -->
+            <div class="gerencial-filters-group">
+              <span class="material-symbols-rounded" style="color: var(--primary); font-size: 18px;">tune</span>
+              <span style="font-weight: 600; font-size: 0.85rem;">Filtros</span>
             </div>
 
-            <!-- FILA 2: Rango de Fechas, Accesos Rápidos y Botón Exportar -->
-            <div class="val-row-2" style="display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; justify-content: space-between !important; gap: 8px !important; width: 100% !important; overflow-x: auto !important; white-space: nowrap !important;">
-              <div class="gerencial-filters-group">
-                <label class="gerencial-filter-label" for="val-input-start-date">Desde</label>
-                <input type="date" id="val-input-start-date" class="gerencial-input">
-                <label class="gerencial-filter-label" for="val-input-end-date">Hasta</label>
-                <input type="date" id="val-input-end-date" class="gerencial-input">
-              </div>
-              <div class="quick-filters-group" style="display: flex !important; flex-direction: row !important; gap: 6px !important;">
-                <button type="button" id="btn-val-quick-month" class="btn-outline" style="white-space: nowrap !important; height: 32px !important; padding: 4px 10px !important; font-size: 0.78rem !important;">Mes Actual</button>
-                <button type="button" id="btn-val-quick-6m" class="btn-outline" style="white-space: nowrap !important; height: 32px !important; padding: 4px 10px !important; font-size: 0.78rem !important;">6 Meses</button>
-              </div>
-              <button type="button" id="btn-export-validations" class="btn-excel" style="white-space: nowrap !important; height: 32px !important; padding: 4px 14px !important; font-size: 0.78rem !important; display: inline-flex !important; align-items: center !important; gap: 4px !important;">
+            <!-- Filtro Sanción -->
+            <div class="gerencial-filters-group">
+              <label class="gerencial-filter-label" for="val-select-status">Sanción</label>
+              <select id="val-select-status" class="gerencial-select" style="min-width: 135px;">
+                <option value="all">Todos los Estados</option>
+                <option value="Baja Automática">🚨 Baja Automática</option>
+                <option value="Causal de Retiro">⛔ Causal de Retiro</option>
+                <option value="Exceso Tolerancia">⚠️ Exceso Tolerancia</option>
+                <option value="En Regla">✅ En Regla</option>
+              </select>
+            </div>
+
+            <!-- Filtro Colaborador -->
+            <div class="gerencial-filters-group" style="flex: 1; min-width: 170px; max-width: 250px;">
+              <label class="gerencial-filter-label" for="val-select-employee">Colaborador</label>
+              <select id="val-select-employee" class="gerencial-select" style="width: 100%;">
+                <option value="all">Todos los Colaboradores</option>
+              </select>
+            </div>
+
+            <!-- Filtro Tipo Horario -->
+            <div class="gerencial-filters-group">
+              <label class="gerencial-filter-label" for="val-select-schedule-type">Horario</label>
+              <select id="val-select-schedule-type" class="gerencial-select">
+                <option value="all">Todos</option>
+                <option value="fijo">Fijo</option>
+                <option value="flexible">Flexible</option>
+              </select>
+            </div>
+
+            <!-- Rango Fechas: Desde - Hasta -->
+            <div class="gerencial-filters-group">
+              <label class="gerencial-filter-label" for="val-input-start-date">Desde</label>
+              <input type="date" id="val-input-start-date" class="gerencial-input" style="width: 125px;">
+              <label class="gerencial-filter-label" for="val-input-end-date">Hasta</label>
+              <input type="date" id="val-input-end-date" class="gerencial-input" style="width: 125px;">
+            </div>
+
+            <!-- Botones Rápidos: Mes Actual / 6 Meses -->
+            <div class="quick-filters-group">
+              <button type="button" id="btn-val-quick-month" class="btn-outline" style="height: 34px; padding: 0 10px; font-size: 0.78rem; white-space: nowrap;">Mes Actual</button>
+              <button type="button" id="btn-val-quick-6m" class="btn-outline" style="height: 34px; padding: 0 10px; font-size: 0.78rem; white-space: nowrap;">6 Meses</button>
+            </div>
+
+            <!-- Botón Exportar Excel -->
+            <div style="margin-left: auto;">
+              <button type="button" id="btn-export-validations" class="btn-excel" style="height: 34px; padding: 0 14px; font-size: 0.8rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;">
                 <span class="material-symbols-rounded" style="font-size: 16px;">download</span>
                 <span>Exportar Excel</span>
               </button>
@@ -2353,7 +2361,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <!-- Script Principal de la Aplicación -->
-  <script src="app.js?v=20260810_v130"></script>
+  <script src="app.js?v=20260810_v133"></script>
 
 
 

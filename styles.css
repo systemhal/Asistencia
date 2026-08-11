@@ -2027,6 +2027,64 @@ input::-webkit-calendar-picker-indicator:hover {
   }
 }
 
+/* ─── BARRA DE FILTROS VALIDACIONES: 1 SOLA FILA HORIZONTAL UNIFICADA ─── */
+.val-filter-bar-unified {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  padding: 10px 18px !important;
+  margin-bottom: 20px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  white-space: nowrap !important;
+  scrollbar-width: thin;
+}
+
+.val-filter-bar-unified .gerencial-filters-group {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.val-filter-bar-unified .gerencial-filter-label {
+  font-size: 0.8rem !important;
+  color: var(--text-muted) !important;
+  white-space: nowrap !important;
+  margin: 0 !important;
+}
+
+.val-filter-bar-unified .quick-filters-group {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.val-filter-bar-unified .quick-filters-group button {
+  height: 34px !important;
+  padding: 0 10px !important;
+  font-size: 0.78rem !important;
+  white-space: nowrap !important;
+}
+
+.val-filter-bar-unified .btn-excel {
+  height: 34px !important;
+  padding: 0 14px !important;
+  font-size: 0.8rem !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
 /* ─── MOBILE (≤ 992px): TODAS LAS BARRAS EN 2 FILAS ORGANIZADAS ─── */
 @media (max-width: 992px) {
   .daily-filter-bar,
@@ -2489,13 +2547,7 @@ input::-webkit-calendar-picker-indicator:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  align-items: flex-end;
-}
-
-.val-filter-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
 }
 
 [data-theme="light"] .val-metric-card,
@@ -2664,133 +2716,126 @@ body.light-theme .val-absence-badge {
   text-align: left !important;
 }
 
-/* Badging con Color Metodológico de Alta Definición y Contraste */
-.val-tardiness-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 0.83rem;
-  white-space: nowrap;
-  letter-spacing: 0.2px;
-}
-
-.val-tardiness-danger {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(220, 38, 38, 0.15)) !important;
-  color: #ff6b6b !important;
-  border: 1px solid rgba(239, 68, 68, 0.5) !important;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15) !important;
-}
-
-[data-theme="light"] .val-tardiness-danger,
-body.light-theme .val-tardiness-danger {
-  background: linear-gradient(135deg, #fee2e2, #fecaca) !important;
-  color: #991b1b !important;
-  border: 1px solid #ef4444 !important;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12) !important;
-}
-
-.val-tardiness-warning {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15)) !important;
-  color: #fcd34d !important;
-  border: 1px solid rgba(245, 158, 11, 0.5) !important;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15) !important;
-}
-
-[data-theme="light"] .val-tardiness-warning,
-body.light-theme .val-tardiness-warning {
-  background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
-  color: #92400e !important;
-  border: 1px solid #f59e0b !important;
-  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.12) !important;
-}
-
-.val-tardiness-info {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.15)) !important;
-  color: #93c5fd !important;
-  border: 1px solid rgba(59, 130, 246, 0.5) !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15) !important;
-}
-
-[data-theme="light"] .val-tardiness-info,
-body.light-theme .val-tardiness-info {
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe) !important;
-  color: #1e40af !important;
-  border: 1px solid #3b82f6 !important;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12) !important;
-}
-
-.val-tardiness-neutral {
-  background: rgba(148, 163, 184, 0.12) !important;
-  color: #94a3b8 !important;
-  border: 1px solid rgba(148, 163, 184, 0.25) !important;
-}
-
-[data-theme="light"] .val-tardiness-neutral,
-body.light-theme .val-tardiness-neutral {
-  background: #f1f5f9 !important;
-  color: #475569 !important;
-  border: 1px solid #cbd5e1 !important;
-}
-
-/* Badges para Faltas */
+/* Resultados de Tardanzas y Faltas sin Borde ni Cápsula (Texto Limpio y Elegante) */
+.val-tardiness-badge,
 .val-faltas-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 0.83rem;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
   white-space: nowrap;
-  letter-spacing: 0.2px;
 }
 
+/* Colores de Tardanzas */
+.val-tardiness-danger {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #f87171 !important;
+}
+
+[data-theme="light"] .val-tardiness-danger,
+body.light-theme .val-tardiness-danger {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #dc2626 !important;
+}
+
+.val-tardiness-warning {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="light"] .val-tardiness-warning,
+body.light-theme .val-tardiness-warning {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #d97706 !important;
+}
+
+.val-tardiness-info {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #60a5fa !important;
+}
+
+[data-theme="light"] .val-tardiness-info,
+body.light-theme .val-tardiness-info {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #2563eb !important;
+}
+
+.val-tardiness-neutral {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="light"] .val-tardiness-neutral,
+body.light-theme .val-tardiness-neutral {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #64748b !important;
+}
+
+/* Colores de Faltas */
 .val-faltas-danger {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(220, 38, 38, 0.15)) !important;
-  color: #ff6b6b !important;
-  border: 1px solid rgba(239, 68, 68, 0.5) !important;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #f87171 !important;
 }
 
 [data-theme="light"] .val-faltas-danger,
 body.light-theme .val-faltas-danger {
-  background: linear-gradient(135deg, #fee2e2, #fecaca) !important;
-  color: #991b1b !important;
-  border: 1px solid #ef4444 !important;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #dc2626 !important;
 }
 
 .val-faltas-warning {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15)) !important;
-  color: #fcd34d !important;
-  border: 1px solid rgba(245, 158, 11, 0.5) !important;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #fbbf24 !important;
 }
 
 [data-theme="light"] .val-faltas-warning,
 body.light-theme .val-faltas-warning {
-  background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
-  color: #92400e !important;
-  border: 1px solid #f59e0b !important;
-  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.12) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #d97706 !important;
 }
 
 .val-faltas-neutral {
-  background: rgba(148, 163, 184, 0.12) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
   color: #94a3b8 !important;
-  border: 1px solid rgba(148, 163, 184, 0.25) !important;
 }
 
 [data-theme="light"] .val-faltas-neutral,
 body.light-theme .val-faltas-neutral {
-  background: #f1f5f9 !important;
-  color: #475569 !important;
-  border: 1px solid #cbd5e1 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #64748b !important;
 }
 
 /* STATUS BADGES VIBRANTES EN LIGHT THEME */
@@ -3097,12 +3142,14 @@ body.light-theme .val-table-body-center td {
   border-bottom: 1px solid #e2e8f0 !important;
 }
 
-/* Reducción Balanceada de Badges para Faltas y Tardanzas */
+/* Resultados Limpios de Faltas y Tardanzas */
 #tab-validations-content .val-tardiness-badge,
 #tab-validations-content .val-faltas-badge {
-  padding: 4px 11px !important;
-  font-size: 0.78rem !important;
-  border-radius: 14px !important;
+  padding: 0 !important;
+  font-size: 0.84rem !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 #tab-validations-content .val-badge {
@@ -4628,54 +4675,19 @@ body.light-theme .btn-admin-edit:hover {
     border-radius: var(--radius-sm) !important;
   }
 
-  /* ─── CONTROL DE VALIDACIONES (VAL) FILTERS: EXACTAMENTE 2 FILAS ─── */
-  .val-filter-bar {
+  /* ─── CONTROL DE VALIDACIONES (VAL) FILTERS: 1 FILA UNIFICADA ─── */
+  .val-filter-bar-single {
     display: flex !important;
-    flex-direction: column !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
     gap: 8px !important;
-    padding: 10px 12px !important;
+    padding: 8px 12px !important;
     margin-bottom: 14px !important;
     width: 100% !important;
     box-sizing: border-box !important;
-  }
-
-  /* FILA 1: Sanción, Colaborador, Tipo Horario */
-  .val-row-1 {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    gap: 8px !important;
-    width: 100% !important;
     overflow-x: auto !important;
-    overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: none !important;
-  }
-  .val-row-1::-webkit-scrollbar { display: none !important; }
-
-
-  /* FILA 2: Rango de Fechas, Accesos Rápidos y Exportar Excel */
-  .val-row-2 {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 6px !important;
-    width: 100% !important;
-    overflow-x: auto !important;
-  }
-
-  .val-row-2 button {
-    height: 34px !important;
-    font-size: 0.78rem !important;
-    padding: 0 10px !important;
-    white-space: nowrap !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 4px !important;
-    flex-shrink: 0 !important;
   }
 
 
