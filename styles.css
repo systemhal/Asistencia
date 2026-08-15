@@ -1045,17 +1045,25 @@ input::-webkit-calendar-picker-indicator:hover {
 .admin-tabs-nav.vertical .btn-admin-tab {
   width: 100%;
   justify-content: flex-start;
+  text-align: left !important;
   padding: 11px 14px;
   border-radius: var(--radius-md);
   font-size: 0.88rem;
+  line-height: 1.25;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
   transition: all 0.22s ease;
 }
 
+.admin-tabs-nav.vertical .btn-admin-tab span:not(.material-symbols-rounded) {
+  text-align: left !important;
+  line-height: 1.25;
+}
+
 .admin-tabs-nav.vertical .btn-admin-tab .material-symbols-rounded {
   font-size: 20px;
+  flex-shrink: 0;
   transition: transform 0.2s ease;
 }
 
@@ -2697,9 +2705,46 @@ body.light-theme .val-absence-badge {
   white-space: nowrap !important;
 }
 
-.val-single-line-bar button {
+/* ─── CONTENEDOR DE SUB-PESTAÑAS PILLS (MODO DÍA / RANGO / MES Y GERENCIAL / VALIDACIONES) ─── */
+.report-submode-pill-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  background: var(--bg-inner, #f1f5f9) !important;
+  border: 1px solid var(--border-color, #e2e8f0) !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+  gap: 4px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+  margin-top: 6px !important;
+  margin-bottom: 20px !important;
+  overflow-x: auto !important;
+  max-width: 100% !important;
+}
+
+[data-theme="dark"] .report-submode-pill-container {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.btn-report-mode {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 18px !important;
+  border-radius: 8px !important;
+  font-size: 0.84rem !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
   white-space: nowrap !important;
-  flex-shrink: 0 !important;
+  border: 1px solid transparent !important;
+}
+
+[data-theme="dark"] .btn-report-mode.active {
+  background: #1e293b !important;
+  color: #818cf8 !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Centrado de Encabezados y Celdas de Validaciones */

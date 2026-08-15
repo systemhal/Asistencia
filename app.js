@@ -2418,17 +2418,174 @@ function showView(viewId) {
 }
 
 /* ==========================================================================
-   ADMIN TABS SWITCHER ENGINE
+   ADMIN TABS SWITCHER ENGINE (PROPUESTA A: 5 MÓDULOS MAESTROS CON SUB-PESTAÑAS)
    ========================================================================== */
+
+/** Helper: devuelve fecha ISO (YYYY-MM-DD) desde Date */
+function _toISODate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+/** Helper: devuelve YYYY-MM desde Date */
+function _toISOMonth(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+let currentConsolidatedSubMode = 'daily';
+function switchConsolidatedSubMode(submode) {
+  currentConsolidatedSubMode = submode;
+  const btnDaily = document.getElementById('btn-submode-daily');
+  const btnCons = document.getElementById('btn-submode-consolidated');
+  const btnMonthly = document.getElementById('btn-submode-monthly');
+  const viewDaily = document.getElementById('subtab-daily-view');
+  const viewCons = document.getElementById('subtab-consolidated-view');
+  const viewMonthly = document.getElementById('subtab-monthly-view');
+
+  const buttons = [
+    { el: btnDaily, mode: 'daily' },
+    { el: btnCons, mode: 'consolidated' },
+    { el: btnMonthly, mode: 'monthly' }
+  ];
+
+  buttons.forEach(b => {
+    if (!b.el) return;
+    if (b.mode === submode) {
+      b.el.classList.add('active');
+      b.el.style.background = '#ffffff';
+      b.el.style.color = 'var(--primary, #4f46e5)';
+      b.el.style.fontWeight = '700';
+      b.el.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+      b.el.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.06)';
+    } else {
+      b.el.classList.remove('active');
+      b.el.style.background = 'transparent';
+      b.el.style.color = '#64748b';
+      b.el.style.fontWeight = '600';
+      b.el.style.borderColor = 'transparent';
+      b.el.style.boxShadow = 'none';
+    }
+  });
+
+  if (viewDaily) viewDaily.style.display = (submode === 'daily') ? 'block' : 'none';
+  if (viewCons) viewCons.style.display = (submode === 'consolidated') ? 'block' : 'none';
+  if (viewMonthly) viewMonthly.style.display = (submode === 'monthly') ? 'block' : 'none';
+
+  const now = new Date();
+
+  if (submode === 'daily') {
+    // Prefill con el día más reciente (hoy) si no hay valor
+    const dateInput = document.getElementById('daily-select-date');
+    if (dateInput && !dateInput.value) {
+      dateInput.value = _toISODate(now);
+    }
+    if (typeof loadDailySummaryReport === 'function') loadDailySummaryReport();
+  } else if (submode === 'consolidated') {
+    // Prefill con el rango del mes en curso
+    const startInput = document.getElementById('consolidated-start-date');
+    const endInput = document.getElementById('consolidated-end-date');
+    if (startInput && !startInput.value) {
+      startInput.value = _toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
+    }
+    if (endInput && !endInput.value) {
+      endInput.value = _toISODate(now);
+    }
+    if (typeof loadConsolidatedReport === 'function') loadConsolidatedReport();
+  } else if (submode === 'monthly') {
+    // Prefill con el mes en curso
+    const monthInput = document.getElementById('monthly-select-month');
+    if (monthInput && !monthInput.value) {
+      monthInput.value = _toISOMonth(now);
+    }
+    if (typeof loadMonthlyReport === 'function') loadMonthlyReport();
+  }
+}
+window.switchConsolidatedSubMode = switchConsolidatedSubMode;
+
+let currentGerencialSubMode = 'gerencial';
+function switchGerencialSubMode(submode) {
+  currentGerencialSubMode = submode;
+  const btnGer = document.getElementById('btn-submode-gerencial');
+  const btnVal = document.getElementById('btn-submode-validations');
+  const viewGer = document.getElementById('subtab-gerencial-view');
+  const viewVal = document.getElementById('subtab-validations-view');
+
+  const buttons = [
+    { el: btnGer, mode: 'gerencial' },
+    { el: btnVal, mode: 'validations' }
+  ];
+
+  buttons.forEach(b => {
+    if (!b.el) return;
+    if (b.mode === submode) {
+      b.el.classList.add('active');
+      b.el.style.background = '#ffffff';
+      b.el.style.color = 'var(--primary, #4f46e5)';
+      b.el.style.fontWeight = '700';
+      b.el.style.borderColor = 'rgba(226, 232, 240, 0.8)';
+      b.el.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.06)';
+    } else {
+      b.el.classList.remove('active');
+      b.el.style.background = 'transparent';
+      b.el.style.color = '#64748b';
+      b.el.style.fontWeight = '600';
+      b.el.style.borderColor = 'transparent';
+      b.el.style.boxShadow = 'none';
+    }
+  });
+
+  if (viewGer) viewGer.style.display = (submode === 'gerencial') ? 'block' : 'none';
+  if (viewVal) viewVal.style.display = (submode === 'validations') ? 'block' : 'none';
+
+  const now = new Date();
+
+  if (submode === 'gerencial') {
+    // Prefill gerencial con mes en curso
+    const startInput = document.getElementById('ger-start-date');
+    const endInput = document.getElementById('ger-end-date');
+    if (startInput && !startInput.value) {
+      startInput.value = _toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
+    }
+    if (endInput && !endInput.value) {
+      endInput.value = _toISODate(now);
+    }
+    if (typeof updateGerencialEmployeeSelect === 'function') updateGerencialEmployeeSelect();
+    if (typeof loadGerencialReport === 'function') loadGerencialReport();
+  } else if (submode === 'validations') {
+    // Prefill validaciones con mes en curso
+    const startValInput = document.getElementById('val-input-start-date');
+    const endValInput = document.getElementById('val-input-end-date');
+    if (startValInput && !startValInput.value) {
+      startValInput.value = _toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
+    }
+    if (endValInput && !endValInput.value) {
+      endValInput.value = _toISODate(now);
+    }
+    if (typeof updateValidationEmployeeSelectOptions === 'function') updateValidationEmployeeSelectOptions();
+    if (typeof renderValidationsView === 'function') renderValidationsView();
+  }
+}
+window.switchGerencialSubMode = switchGerencialSubMode;
 
 function switchAdminTab(targetTab) {
   if (!targetTab) return;
+
+  // Redirección inteligente / compatibilidad con llamados previos
+  let effectiveTab = targetTab;
+  let targetSubmode = null;
+
+  if (targetTab === 'daily' || targetTab === 'consolidated' || targetTab === 'monthly') {
+    effectiveTab = 'consolidated-master';
+    targetSubmode = targetTab;
+  } else if (targetTab === 'gerencial' || targetTab === 'validations') {
+    effectiveTab = 'gerencial-master';
+    targetSubmode = targetTab;
+  }
 
   const tabButtons = document.querySelectorAll('.btn-admin-tab');
   const tabContents = document.querySelectorAll('.admin-tab-content');
 
   tabButtons.forEach(b => {
-    if (b.getAttribute('data-tab') === targetTab) {
+    if (b.getAttribute('data-tab') === effectiveTab) {
       b.classList.add('active');
     } else {
       b.classList.remove('active');
@@ -2437,7 +2594,7 @@ function switchAdminTab(targetTab) {
 
   // ── Sincronizar bottom nav mobile ──
   document.querySelectorAll('.admin-mob-tab').forEach(b => {
-    if (b.getAttribute('data-tab') === targetTab) {
+    if (b.getAttribute('data-tab') === effectiveTab) {
       b.classList.add('active');
     } else {
       b.classList.remove('active');
@@ -2449,7 +2606,7 @@ function switchAdminTab(targetTab) {
     c.classList.add('hidden');
   });
 
-  const activeContent = document.getElementById(`tab-${targetTab}-content`);
+  const activeContent = document.getElementById(`tab-${effectiveTab}-content`);
   if (activeContent) {
     activeContent.classList.remove('hidden');
     activeContent.classList.add('active');
@@ -2459,42 +2616,53 @@ function switchAdminTab(targetTab) {
   if (pageTitleEl) {
     const titleMap = {
       'live': 'Panel de Monitoreo General',
-      'daily': 'Resumen Diario de Asistencia',
-      'consolidated': 'Resumen General Consolidado',
-      'monthly': 'Resumen y Récord Mensual',
+      'consolidated-master': 'Reportes Consolidados de Asistencia',
       'reports': 'Reportes Detallados por Agente',
-      'gerencial': 'Vista y Métricas Gerenciales',
-      'validations': 'Control de Validaciones y Sanciones',
+      'gerencial-master': 'Control Gerencial, Analítica y Sanciones',
       'register': 'Gestión de Personal y Configuración'
     };
-    pageTitleEl.textContent = titleMap[targetTab] || 'Panel de Administración';
+    pageTitleEl.textContent = titleMap[effectiveTab] || 'Panel de Administración';
   }
 
-  if (targetTab === 'live') {
+  const now = new Date();
+
+  if (effectiveTab === 'live') {
     if (typeof updateAdminView === 'function') updateAdminView();
-  } else if (targetTab === 'daily') {
-    if (typeof renderDailySummaryTable === 'function') renderDailySummaryTable();
-  } else if (targetTab === 'consolidated') {
-    if (typeof loadConsolidatedReport === 'function') loadConsolidatedReport();
-  } else if (targetTab === 'monthly') {
-    if (typeof loadMonthlyReport === 'function') loadMonthlyReport();
-  } else if (targetTab === 'reports') {
-    if (typeof populateHistoricalEmployeesDropdown === 'function') populateHistoricalEmployeesDropdown();
+  } else if (effectiveTab === 'consolidated-master') {
+    switchConsolidatedSubMode(targetSubmode || currentConsolidatedSubMode || 'daily');
+  } else if (effectiveTab === 'reports') {
+    // Prefill fechas de reporte por agente con mes en curso
+    const repStart = document.getElementById('report-start-date');
+    const repEnd = document.getElementById('report-end-date');
+    if (repStart && !repStart.value) {
+      repStart.value = _toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
+    }
+    if (repEnd && !repEnd.value) {
+      repEnd.value = _toISODate(now);
+    }
+    if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
+    if (typeof populateReportEmployeesDropdown === 'function') populateReportEmployeesDropdown();
+
+    const select = document.getElementById('select-report-employee');
+    if (select && (!select.value || select.value === '')) {
+      select.value = 'all';
+    }
+
     const btnHist = document.getElementById('btn-mode-historical-report');
     if (btnHist && btnHist.classList.contains('active')) {
       if (typeof loadHistoricalMultiMonthReport === 'function') loadHistoricalMultiMonthReport();
     } else {
-      const select = document.getElementById('select-report-employee');
-      if (select && select.value && typeof renderAgentReport === 'function') renderAgentReport(select.value);
+      if (select && select.value && typeof renderAgentReport === 'function') {
+        renderAgentReport(select.value);
+      }
     }
-  } else if (targetTab === 'gerencial') {
-    if (typeof renderGerencialView === 'function') renderGerencialView();
-  } else if (targetTab === 'validations') {
-    if (typeof renderValidationsView === 'function') renderValidationsView();
-  } else if (targetTab === 'register') {
-    if (typeof renderEmployeeTable === 'function') renderEmployeeTable();
+  } else if (effectiveTab === 'gerencial-master') {
+    switchGerencialSubMode(targetSubmode || currentGerencialSubMode || 'gerencial');
+  } else if (effectiveTab === 'register') {
+    if (typeof updateReportEmployeeSelect === 'function') updateReportEmployeeSelect();
     if (typeof renderFeriadosTable === 'function') renderFeriadosTable();
     if (typeof renderJustificacionesTable === 'function') renderJustificacionesTable();
+    if (typeof loadSecuritySettings === 'function') loadSecuritySettings();
   }
 }
 window.switchAdminTab = switchAdminTab;
@@ -2668,12 +2836,15 @@ function updatePrintTimestamp() {
 function autoClosePendingSessions() {
   // Las sesiones de días anteriores se resetean localmente a 'Desconectado' 
   // para que el colaborador pueda marcar 'Ingreso' en el nuevo día.
-  // IMPORTANTE: NUNCA se inyectan marcas ficticias a Google Sheets.
-  // Google Sheets es la fuente de verdad y solo almacena marcas realizadas por colaboradores o administradores.
+  // Además, se detectan jornadas pasadas con marcas incompletas (sin Salida o sin Fin Refrigerio)
+  // y se persisten las marcas de cierre automático en Google Sheets.
   let stateChanged = false;
   const today = new Date();
   const todayStr = today.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
   const normToday = normalizeDateStr(todayStr);
+
+  // Recopilar marcas pendientes de cierre automático para enviar a Google Sheets
+  const pendingAutoCloses = [];
 
   Object.keys(attendanceState).forEach(dni => {
     const state = attendanceState[dni];
@@ -2697,10 +2868,157 @@ function autoClosePendingSessions() {
       state.timestamp = null;
       stateChanged = true;
     }
+
+    // --- CIERRE AUTOMÁTICO PERSISTENTE: Detectar días pasados con marcas incompletas ---
+    const employee = employeesDatabase[dni] || findEmployeeByDni(dni);
+    if (!employee) return;
+
+    const cleanDni = String(dni).replace(/'/g, '').trim();
+
+    // Agrupar historial por fecha
+    const marksByDate = {};
+    state.history.forEach(item => {
+      const normDate = normalizeDateStr(item.dateStr);
+      if (!marksByDate[normDate]) marksByDate[normDate] = [];
+      marksByDate[normDate].push(item);
+    });
+
+    Object.keys(marksByDate).forEach(normDate => {
+      // Solo procesar fechas pasadas (no hoy)
+      if (normDate === normToday) return;
+
+      const dayMarks = marksByDate[normDate];
+      const hasIngreso = dayMarks.some(m => m.action === 'Ingreso');
+      const hasSalida = dayMarks.some(m => m.action === 'Salida');
+      const hasBreakIn = dayMarks.some(m => m.action === 'Inicio Refrigerio');
+      const hasBreakOut = dayMarks.some(m => m.action === 'Fin Refrigerio');
+
+      // Solo intervenir si hay Ingreso pero no Salida
+      if (!hasIngreso || hasSalida) return;
+
+      // Determinar horario del turno para ese día
+      const isFlexible = !!(employee.workStart === "—" || employee.weeklySchedule === "flexible");
+      const parts = normDate.split('/');
+      const dayObj = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      const dayOfWeek = dayObj.getDay();
+
+      let daySched = null;
+      if (isFlexible) {
+        daySched = { workEnd: "18:00", nobreak: true };
+      } else if (employee.weeklySchedule && typeof employee.weeklySchedule === 'object' && employee.weeklySchedule[dayOfWeek]) {
+        daySched = employee.weeklySchedule[dayOfWeek];
+      }
+      if (!daySched) {
+        if (dayOfWeek === 0) daySched = { isRestDay: true, workEnd: "17:00" };
+        else if (dayOfWeek === 6) daySched = { workEnd: "13:00", nobreak: true };
+        else daySched = { workEnd: employee.workEnd || "17:00" };
+      }
+
+      // Si es día de descanso, no autocompletar
+      if (daySched.isRestDay) return;
+
+      const workEndStr = daySched.workEnd || employee.workEnd || "17:00";
+      const [endH, endM] = workEndStr.split(':').map(Number);
+      const autoCloseDate = new Date(dayObj);
+      autoCloseDate.setHours(endH, endM || 0, 0, 0);
+      const autoCloseTimestamp = autoCloseDate.getTime();
+      const autoCloseDateStr = normDate.split('/').map(v => parseInt(v, 10)).join('/');
+
+      // 1. Si tiene Inicio Refrigerio pero no Fin Refrigerio, cerrar el break 1 hora después del inicio
+      if (hasBreakIn && !hasBreakOut) {
+        const breakInMark = dayMarks.find(m => m.action === 'Inicio Refrigerio');
+        const breakEndTimestamp = breakInMark.timestamp + 3600000; // +1 hora
+        const breakEndDate = new Date(breakEndTimestamp);
+        const breakEndTimeStr = breakEndDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        const breakOutLogItem = {
+          action: 'Fin Refrigerio',
+          timestamp: breakEndTimestamp,
+          timeStr: breakEndTimeStr,
+          dateStr: breakInMark.dateStr,
+          details: 'Cierre automático por omisión de fin de refrigerio',
+          device: 'Sistema'
+        };
+
+        // Agregar al historial local si no existe
+        const existsBreakOut = state.history.some(h =>
+          h.action === 'Fin Refrigerio' && normalizeDateStr(h.dateStr) === normDate
+        );
+        if (!existsBreakOut) {
+          state.history.push(breakOutLogItem);
+          stateChanged = true;
+          pendingAutoCloses.push({
+            dni: cleanDni,
+            name: employee.name,
+            action: 'Fin Refrigerio',
+            customTime: breakEndDate,
+            dateStr: breakInMark.dateStr
+          });
+        }
+      }
+
+      // 2. Registrar Salida automática al fin del turno programado
+      const salidaLogItem = {
+        action: 'Salida',
+        timestamp: autoCloseTimestamp,
+        timeStr: autoCloseDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        dateStr: autoCloseDateStr,
+        details: 'Cierre automático por omisión de salida',
+        device: 'Sistema'
+      };
+
+      const existsSalida = state.history.some(h =>
+        h.action === 'Salida' && normalizeDateStr(h.dateStr) === normDate
+      );
+      if (!existsSalida) {
+        state.history.push(salidaLogItem);
+        stateChanged = true;
+        pendingAutoCloses.push({
+          dni: cleanDni,
+          name: employee.name,
+          action: 'Salida',
+          customTime: autoCloseDate,
+          dateStr: autoCloseDateStr
+        });
+      }
+    });
   });
 
   if (stateChanged) {
     saveState();
+  }
+
+  // Enviar marcas de cierre automático a Google Sheets (de forma silenciosa, sin toasts individuales)
+  if (pendingAutoCloses.length > 0 && googleScriptUrl) {
+    console.log(`[AutoClose] Persistiendo ${pendingAutoCloses.length} marca(s) de cierre automático en Google Sheets...`);
+    pendingAutoCloses.forEach(item => {
+      const payload = {
+        action: item.action,
+        apiKey: googleScriptApiKey,
+        employeeId: item.dni,
+        employeeName: item.name,
+        details: item.action === 'Salida' ? 'Cierre automático por omisión de salida' : 'Cierre automático por omisión de fin de refrigerio',
+        device: 'Sistema',
+        customDate: item.customTime.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' }),
+        customTime: item.customTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        customTimestamp: item.customTime.getTime()
+      };
+
+      fetch(getScriptUrlWithApiKey(), {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(() => {
+        console.log(`[AutoClose] ✅ ${item.action} registrada para ${item.name} (${item.dni}) fecha ${item.dateStr}`);
+      })
+      .catch(err => {
+        console.error(`[AutoClose] ❌ Error al registrar ${item.action} para ${item.dni}:`, err);
+      });
+    });
+
+    showToast('info', 'Cierre Automático', `Se regularizaron ${pendingAutoCloses.length} marca(s) omitidas de días anteriores.`);
   }
 }
 
@@ -3165,10 +3483,46 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
 
   const isToday = normalizeDateStr(dateStr) === normalizeDateStr(new Date().toLocaleDateString('es-ES'));
   const entradaReal = ingresoMark.timeStr;
-  const salidaReal = salidaMark ? salidaMark.timeStr : (isToday ? 'En curso' : 'Sin salida');
   
+  // Detectar si la salida física fue registrada o debe ser autocompletada por omisión en fecha pasada
+  const isMissingExit = !salidaMark && !isToday;
+  
+  let salidaReal = '---';
+  let isAutoClosedExit = false;
+  if (salidaMark) {
+    salidaReal = salidaMark.timeStr;
+  } else if (isToday) {
+    salidaReal = 'En curso';
+  } else {
+    // Omisión de salida en fecha pasada: imputar horario teórico de fin de turno
+    salidaReal = (daySched.workEnd && daySched.workEnd !== '—' && daySched.workEnd !== '---') ? daySched.workEnd : '17:00';
+    isAutoClosedExit = true;
+  }
+
+  // Expectativas teóricas del turno
+  let expectedWorkSeconds = 0;
+  let expectedBreakSeconds = 0;
+  let expectedStart = 0;
+  let expectedEnd = 0;
+
+  if (isFlexible) {
+    expectedWorkSeconds = 0;
+    expectedBreakSeconds = 0;
+  } else {
+    expectedStart = timeStrToSeconds(daySched.workStart || "08:00");
+    expectedEnd = timeStrToSeconds(daySched.workEnd || "17:00");
+    const totalShiftSeconds = Math.max(0, expectedEnd - expectedStart);
+    expectedWorkSeconds = isRestDayOrHolidayOrJustified ? 0 : Math.max(0, (daySched.expectedHours || 8) * 3600);
+    if (isPartialPerm && justification.compensation === 'Sin goce') {
+      expectedWorkSeconds = Math.max(0, expectedWorkSeconds - permDurationSecs);
+    }
+    expectedBreakSeconds = isRestDayOrHolidayOrJustified || daySched.nobreak ? 0 : Math.max(0, totalShiftSeconds - expectedWorkSeconds);
+  }
+
+  // Gestión de refrigerio / break
   let breakReal = '---';
   let breakSeconds = 0;
+  let isAutoClosedBreak = false;
   if (breakInMark) {
     if (breakOutMark) {
       breakReal = `${breakInMark.timeStr} → ${breakOutMark.timeStr}`;
@@ -3178,14 +3532,16 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
         breakReal = `${breakInMark.timeStr} → En curso`;
         breakSeconds = Math.max(0, Math.floor((Date.now() - breakInMark.timestamp) / 1000));
       } else {
-        breakReal = `${breakInMark.timeStr} → Sin fin`;
-        breakSeconds = 0;
+        // En días pasados con break abierto: topar a la duración reglamentaria (60 min) en vez de inflar el break
+        breakSeconds = expectedBreakSeconds > 0 ? expectedBreakSeconds : 3600;
+        breakReal = `${breakInMark.timeStr} → (Auto 1h)`;
+        isAutoClosedBreak = true;
       }
     }
   }
 
   // Detectar si la salida fue autocompletada por omisión
-  const isAutoClose = salidaMark && (
+  const isAutoClose = isAutoClosedExit || (salidaMark && (
     (salidaMark.details && (
       salidaMark.details.includes('Autocompletado') || 
       salidaMark.details.includes('Autocompletado por omisión') ||
@@ -3193,7 +3549,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     )) || 
     salidaMark.timeStr === '23:59:59' ||
     salidaMark.timeStr === '23:59:58'
-  );
+  ));
 
   let adjustedSalidaTimestamp = salidaMark ? salidaMark.timestamp : null;
 
@@ -3217,51 +3573,38 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   } else if (isToday) {
     totalElapsedSeconds = Math.max(0, Math.floor((Date.now() - effectiveIngresoTimestamp) / 1000));
   } else {
-    const lastMark = historyForDate[historyForDate.length - 1];
-    totalElapsedSeconds = Math.max(0, Math.floor((lastMark.timestamp - effectiveIngresoTimestamp) / 1000));
+    // Si no hubo salida física en fecha pasada, calcular lapso según turno programado
+    const actualEntrySecs = timeStrToSeconds(entradaReal);
+    const calcStartSecs = Math.max(actualEntrySecs, expectedStart);
+    totalElapsedSeconds = Math.max(0, expectedEnd - calcStartSecs);
   }
 
-  let workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
-  if (isPartialPerm && justification.compensation !== 'Sin goce') {
-    workedSeconds += permDurationSecs;
-  }
-
-  // Expectativas teóricas
-  let expectedWorkSeconds = 0;
-  let expectedBreakSeconds = 0;
-
-  if (isFlexible) {
-    expectedWorkSeconds = 0;
-    expectedBreakSeconds = 0;
-    if (isAutoClose) {
+  let workedSeconds = 0;
+  if (isAutoClose) {
+    if (isRestDayOrHolidayOrJustified) {
+      workedSeconds = 0;
+    } else if (isFlexible) {
       // Cierre automático: capar a un máximo de 8 horas para flexible
-      workedSeconds = Math.min(workedSeconds, 28800);
-    }
-  } else {
-    const expectedStart = timeStrToSeconds(daySched.workStart || "08:00");
-    const expectedEnd = timeStrToSeconds(daySched.workEnd || "17:00");
-    const totalShiftSeconds = Math.max(0, expectedEnd - expectedStart);
-    expectedWorkSeconds = isRestDayOrHolidayOrJustified ? 0 : Math.max(0, (daySched.expectedHours || 8) * 3600);
-    if (isPartialPerm && justification.compensation === 'Sin goce') {
-      expectedWorkSeconds = Math.max(0, expectedWorkSeconds - permDurationSecs);
-    }
-    expectedBreakSeconds = isRestDayOrHolidayOrJustified || daySched.nobreak ? 0 : Math.max(0, totalShiftSeconds - expectedWorkSeconds);
-
-    if (isAutoClose) {
-      if (isRestDayOrHolidayOrJustified) {
-        workedSeconds = 0;
-      } else {
-        // Simular salida teórica para penalizar tardanzas pero no generar horas extras
-        const actualEntrySecs = timeStrToSeconds(entradaReal);
-        const calcStartSecs = Math.max(actualEntrySecs, expectedStart);
-        const calculatedElapsed = Math.max(0, expectedEnd - calcStartSecs);
-        
-        workedSeconds = Math.max(0, calculatedElapsed - breakSeconds);
-        if (workedSeconds > expectedWorkSeconds) {
-          workedSeconds = expectedWorkSeconds;
-        }
+      workedSeconds = Math.min(Math.max(0, totalElapsedSeconds - breakSeconds), 28800);
+    } else {
+      // Simular salida teórica para penalizar tardanzas pero no generar horas extras
+      const actualEntrySecs = timeStrToSeconds(entradaReal);
+      const calcStartSecs = Math.max(actualEntrySecs, expectedStart);
+      const calculatedElapsed = Math.max(0, expectedEnd - calcStartSecs);
+      
+      // Si no hubo marcación de break pero el turno contempla refrigerio, deducir el break estándar
+      const effectiveBreakDeduction = breakSeconds > 0 ? breakSeconds : (daySched.nobreak ? 0 : expectedBreakSeconds);
+      workedSeconds = Math.max(0, calculatedElapsed - effectiveBreakDeduction);
+      if (workedSeconds > expectedWorkSeconds) {
+        workedSeconds = expectedWorkSeconds;
       }
     }
+  } else {
+    workedSeconds = Math.max(0, totalElapsedSeconds - breakSeconds);
+  }
+
+  if (isPartialPerm && justification.compensation !== 'Sin goce') {
+    workedSeconds += permDurationSecs;
   }
 
   let diffSeconds = 0;
@@ -3274,7 +3617,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     diffClass = 'diff-neutral';
   } else if (isRestDayOrHolidayOrJustified) {
     // En día de descanso, feriado o justificado, todas las horas trabajadas son a favor (horas extra)
-    if (salidaMark) {
+    if (salidaMark || isAutoClosedExit) {
       diffSeconds = isAutoClose ? 0 : workedSeconds;
       if (diffSeconds > 0) {
         status = `+${formatSecondsToHHMMSS(diffSeconds)}`;
@@ -3289,7 +3632,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   } else {
     // Día laboral normal
-    if (salidaMark) {
+    if (salidaMark || isAutoClosedExit) {
       diffSeconds = workedSeconds - expectedWorkSeconds;
       if (isAutoClose && diffSeconds > 0) {
         diffSeconds = 0;
@@ -3323,7 +3666,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  // Evaluar horas adicionales (overtime en día laborable normal) - No aplica en flexible
+  // Evaluar horas adicionales (overtime en día laborable normal) - No aplica en flexible ni cierres automáticos
   let horasAdicionalesSeconds = 0;
   if (!isFlexible && !isRestDayOrHolidayOrJustified && salidaMark && !isAutoClose) {
     const actualExitSeconds = timeStrToSeconds(salidaReal);
@@ -3333,10 +3676,10 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     }
   }
 
-  // Evaluar exceso de break - No aplica en flexible o sin descanso
+  // Evaluar exceso de break - No aplica en flexible o sin descanso, ni si fue autotopado
   let excessBreakSeconds = 0;
   let hasExcessBreak = false;
-  if (!isFlexible && !isRestDayOrHolidayOrJustified && !daySched.nobreak && breakSeconds > expectedBreakSeconds) {
+  if (!isFlexible && !isRestDayOrHolidayOrJustified && !daySched.nobreak && breakSeconds > expectedBreakSeconds && !isAutoClosedBreak) {
     excessBreakSeconds = breakSeconds - expectedBreakSeconds;
     hasExcessBreak = true;
   }
@@ -3347,7 +3690,7 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
   const diffMinutes = Math.floor(diffSeconds / 60);
 
   const entradaDevice = ingresoMark && ingresoMark.device ? ingresoMark.device : '---';
-  const salidaDevice = salidaMark && salidaMark.device ? salidaMark.device : '---';
+  const salidaDevice = salidaMark && salidaMark.device ? salidaMark.device : (isAutoClosedExit ? 'Sistema (Auto)' : '---');
 
   return {
     entradaReal,
@@ -3368,7 +3711,9 @@ function calculateWorkedTimesForDate(historyForDate, config, dateStr) {
     hasExcessBreak,
     excessBreakSeconds,
     entradaDevice,
-    salidaDevice
+    salidaDevice,
+    isAutoClosedExit,
+    isAutoClosedBreak
   };
 }
 
@@ -3522,44 +3867,44 @@ function updateScheduleSummary(employee, referenceDate, dateLabel) {
 
 // Poblar dropdown de selección para el reporte
 function updateReportEmployeeSelect() {
-
   const select = document.getElementById('select-report-employee');
   const justSelect = document.getElementById('just-employee');
   
   if (select) {
     const currentVal = select.value;
-    select.innerHTML = '<option value="" disabled selected hidden>Seleccionar colaborador...</option>';
+    select.innerHTML = '';
     
     const optAll = document.createElement('option');
     optAll.value = "all";
-    optAll.textContent = "[Todos los Colaboradores]";
+    optAll.textContent = "👥 [Todos los Colaboradores]";
     select.appendChild(optAll);
     
-    Object.keys(employeesDatabase).forEach(dni => {
-      const employee = employeesDatabase[dni];
-      // Si el reporte es 'justSelect', no mostrar inactivos.
+    const staffList = Object.values(employeesDatabase || {}).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    staffList.forEach(employee => {
       if (!isEmployeeActive(employee)) return;
       
       const opt = document.createElement('option');
-      opt.value = dni;
-      opt.textContent = `${employee.name} (DNI: ${dni})`;
+      opt.value = employee.dni;
+      opt.textContent = `${employee.name} (DNI: ${employee.dni})`;
       select.appendChild(opt);
     });
-    if (currentVal && employeesDatabase[currentVal]) {
-      select.value = currentVal;
+    if (currentVal && Array.from(select.options).some(o => o.value.toLowerCase() === currentVal.toLowerCase())) {
+      select.value = (currentVal.toLowerCase() === 'all') ? 'all' : currentVal;
+    } else {
+      select.value = 'all';
     }
   }
 
   if (justSelect) {
     const currentJustVal = justSelect.value;
     justSelect.innerHTML = '<option value="" disabled selected hidden>Seleccionar colaborador...</option>';
-    Object.keys(employeesDatabase).forEach(dni => {
-      const employee = employeesDatabase[dni];
+    const staffList = Object.values(employeesDatabase || {}).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    staffList.forEach(employee => {
       if (!isEmployeeActive(employee)) return;
       
       const opt = document.createElement('option');
-      opt.value = dni;
-      opt.textContent = `${employee.name} (DNI: ${dni})`;
+      opt.value = employee.dni;
+      opt.textContent = `${employee.name} (DNI: ${employee.dni})`;
       justSelect.appendChild(opt);
     });
     if (currentJustVal && employeesDatabase[currentJustVal]) {
@@ -4474,73 +4819,15 @@ function loadConsolidatedReport() {
   renderConsolidatedTable(cachedConsolidatedHistory);
 }
 
-// Lógica de pestañas del panel administrativo
+// Lógica de pestañas del panel administrativo (Delegado a switchAdminTab)
 function setupAdminTabs() {
   const tabButtons = document.querySelectorAll('.btn-admin-tab');
-  const tabContents = document.querySelectorAll('.admin-tab-content');
-  
   tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
       const targetTab = btn.getAttribute('data-tab');
-      
-      tabButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      tabContents.forEach(content => {
-        if (content.id === `tab-${targetTab}-content`) {
-          content.classList.add('active');
-          content.classList.remove('hidden');
-        } else {
-          content.classList.remove('active');
-          content.classList.add('hidden');
-        }
-      });
-      
-      if (targetTab === 'reports') {
-        updateReportEmployeeSelect();
-        const select = document.getElementById('select-report-employee');
-        if (select && select.value) {
-          renderAgentReport(select.value);
-        }
-      }
-      
-      if (targetTab === 'register') {
-        updateReportEmployeeSelect();
-        renderJustificacionesTable();
-        renderFeriadosTable();
-        syncJustificacionesFromGoogleSheets();
-        syncFeriadosFromGoogleSheets();
-      }
-      
-      if (targetTab === 'consolidated') {
-        loadConsolidatedReport();
-      }
-
-      if (targetTab === 'daily') {
-        const dateInput = document.getElementById('daily-select-date');
-        if (dateInput && !dateInput.value) {
-          const now = new Date();
-          const dayStr = String(now.getDate()).padStart(2, '0');
-          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-          dateInput.value = `${now.getFullYear()}-${monthStr}-${dayStr}`;
-        }
-        loadDailySummaryReport();
-      }
-
-      // Reverted overtime tab setup
-      
-      if (targetTab === 'monthly') {
-        const monthInput = document.getElementById('monthly-select-month');
-        if (monthInput && !monthInput.value) {
-          const now = new Date();
-          const monthStr = String(now.getMonth() + 1).padStart(2, '0');
-          monthInput.value = `${now.getFullYear()}-${monthStr}`;
-        }
-        loadMonthlyReport();
-      }
-
-      if (targetTab === 'gerencial') {
-        loadGerencialReport();
+      if (targetTab && typeof switchAdminTab === 'function') {
+        switchAdminTab(targetTab);
       }
     });
   });
@@ -5797,11 +6084,19 @@ function renderDailySummaryTable(history) {
       const outMark = dayMarks.find(m => m.action === 'Salida');
       
       entradaDisplay = inMark ? `${inMark.timeStr} ${getDeviceIconShortHTML(inMark.device)}` : '---';
-      salidaDisplay = outMark ? `${outMark.timeStr} ${getDeviceIconShortHTML(outMark.device)}` : '---';
+      if (outMark) {
+        salidaDisplay = `${outMark.timeStr} ${getDeviceIconShortHTML(outMark.device)}`;
+      } else if (report.isAutoClosedExit) {
+        salidaDisplay = `<span style="color: var(--color-warning); font-weight: 600;" title="Salida autocompletada por omisión">${report.salidaReal}</span> <span style="font-size: 0.72rem; padding: 2px 5px; background: rgba(245, 158, 11, 0.15); color: #d97706; border-radius: 4px; font-weight: 600;" title="Salida autocompletada por omisión">Auto</span>`;
+      } else {
+        salidaDisplay = '---';
+      }
       breakDisplay = formatSecondsToHHMMSS(report.breakSeconds);
       workedDisplay = formatSecondsToHHMMSS(report.workedSeconds);
 
-      if (report.tardiness) {
+      if (report.isAutoClosedExit) {
+        statusBadge = `<span class="table-status-badge Salida" style="background: rgba(245, 158, 11, 0.15); color: #d97706; border-color: rgba(245, 158, 11, 0.3);" title="El colaborador no registró su salida. Se regularizó a su horario contractual.">Asistió (Cierre Auto)</span>`;
+      } else if (report.tardiness) {
         const mins = Math.floor(report.tardinessSeconds / 60);
         tardinessDisplay = `<span style="color: var(--color-error); font-weight: 600;">${mins} min</span>`;
         statusBadge = `<span class="table-status-badge Salida">Tardanza</span>`;
@@ -5967,13 +6262,23 @@ function exportDailySummaryExcel() {
 
       entradaTime = inMark ? inMark.timeStr : '---';
       entradaDevice = inMark ? (inMark.device || 'Desconocido') : '---';
-      salidaTime = outMark ? outMark.timeStr : '---';
-      salidaDevice = outMark ? (outMark.device || 'Desconocido') : '---';
+      if (outMark) {
+        salidaTime = outMark.timeStr;
+        salidaDevice = outMark.device || 'Desconocido';
+      } else if (report.isAutoClosedExit) {
+        salidaTime = `${report.salidaReal} (Auto)`;
+        salidaDevice = "Sistema (Cierre Auto)";
+      } else {
+        salidaTime = '---';
+        salidaDevice = '---';
+      }
 
       breakTime = formatSecondsToHHMMSS(report.breakSeconds);
       workedTime = formatSecondsToHHMMSS(report.workedSeconds);
 
-      if (report.tardiness) {
+      if (report.isAutoClosedExit) {
+        statusText = "Asistió (Cierre Auto)";
+      } else if (report.tardiness) {
         tardinessMins = `${Math.floor(report.tardinessSeconds / 60)} min`;
         statusText = "Tardanza";
       } else {
@@ -10083,27 +10388,18 @@ function handleHistoricalPeriodChange() {
   }
 }
 
-// 3. Poblar Desplegable de Colaboradores (con soporte para "Todos" en modo histórico)
-function populateReportEmployeesDropdown(includeAll = false) {
+// 3. Poblar Desplegable de Colaboradores (con soporte para "Todos los Colaboradores" siempre disponible)
+function populateReportEmployeesDropdown(includeAll = true) {
   const select = document.getElementById('select-report-employee');
   if (!select) return;
   const currentVal = select.value;
 
   select.innerHTML = '';
-  if (includeAll) {
-    const optAll = document.createElement('option');
-    optAll.value = 'ALL';
-    optAll.textContent = '👥 Todos los Colaboradores';
-    select.appendChild(optAll);
-  } else {
-    const optPlaceholder = document.createElement('option');
-    optPlaceholder.value = '';
-    optPlaceholder.disabled = true;
-    optPlaceholder.selected = true;
-    optPlaceholder.hidden = true;
-    optPlaceholder.textContent = 'Seleccionar colaborador...';
-    select.appendChild(optPlaceholder);
-  }
+  
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = '👥 [Todos los Colaboradores]';
+  select.appendChild(optAll);
 
   const staffList = Object.values(employeesDatabase || {}).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   staffList.forEach(emp => {
@@ -10113,10 +10409,10 @@ function populateReportEmployeesDropdown(includeAll = false) {
     select.appendChild(opt);
   });
 
-  if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
-    select.value = currentVal;
-  } else if (includeAll) {
-    select.value = 'ALL';
+  if (currentVal && Array.from(select.options).some(o => o.value.toLowerCase() === currentVal.toLowerCase())) {
+    select.value = (currentVal.toLowerCase() === 'all') ? 'all' : currentVal;
+  } else {
+    select.value = 'all';
   }
 }
 
@@ -10124,15 +10420,16 @@ function populateReportEmployeesDropdown(includeAll = false) {
 function loadHistoricalMultiMonthReport() {
   const empSelect = document.getElementById('select-report-employee');
   const periodSelect = document.getElementById('select-historical-period');
-  const selectedDNI = empSelect ? empSelect.value : 'ALL';
+  const rawDni = empSelect ? empSelect.value : 'all';
+  const selectedDNI = (rawDni || 'all').toLowerCase();
   const periodType = periodSelect ? periodSelect.value : '6months';
 
   // 1. Determinar colaboradores a evaluar
   let targetEmployees = [];
-  if (!selectedDNI || selectedDNI === 'ALL') {
+  if (!selectedDNI || selectedDNI === 'all') {
     targetEmployees = Object.values(employeesDatabase || {});
-  } else if (employeesDatabase[selectedDNI]) {
-    targetEmployees = [employeesDatabase[selectedDNI]];
+  } else if (employeesDatabase[rawDni] || employeesDatabase[selectedDNI]) {
+    targetEmployees = [employeesDatabase[rawDni] || employeesDatabase[selectedDNI]];
   }
 
   if (targetEmployees.length === 0) {
@@ -10144,7 +10441,7 @@ function loadHistoricalMultiMonthReport() {
   const badge = document.getElementById('hist-agent-badge');
   const subtitle = document.getElementById('hist-report-subtitle');
   if (badge) {
-    badge.textContent = (!selectedDNI || selectedDNI === 'ALL')
+    badge.textContent = (!selectedDNI || selectedDNI === 'all')
       ? '👥 Todos los Colaboradores'
       : `${targetEmployees[0].name} (${targetEmployees[0].dni})`;
   }

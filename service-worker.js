@@ -17,7 +17,7 @@
 
 // ── Versión del caché ─────────────────────────────────────────────────────────
 // Cambia este valor cada vez que actualices los archivos del proyecto.
-const CACHE_VERSION  = 'asistencia-msi-v1.3.3';
+const CACHE_VERSION  = 'asistencia-msi-v1.3.8';
 
 
 
