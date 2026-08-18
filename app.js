@@ -110,65 +110,126 @@ function findEmployeeByDni(dni) {
 }
 
 /**
- * Convierte un string de fecha de baja ('YYYY-MM-DD' o 'DD/MM/YYYY') a objeto Date.
+ * Convierte un string de fecha ('YYYY-MM-DD', 'DD/MM/YYYY' o ISO) a objeto Date seguro.
  */
-function parseFechaBaja(fechaBajaStr) {
-  if (!fechaBajaStr) return null;
-  let s = String(fechaBajaStr).trim();
+function parseCustomDate(dateStr) {
+  if (!dateStr) return null;
+  let s = String(dateStr).trim();
   if (s.includes('T')) s = s.split('T')[0];
   
   if (s.includes('/')) {
     const p = s.split('/');
-    if (p.length === 3) return new Date(parseInt(p[2], 10), parseInt(p[1], 10) - 1, parseInt(p[0], 10));
+    if (p.length === 3) {
+      const day = parseInt(p[0], 10);
+      const month = parseInt(p[1], 10) - 1;
+      const year = parseInt(p[2], 10);
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+        return new Date(year, month, day);
+      }
+    }
   } else if (s.includes('-')) {
     const p = s.split('-');
-    if (p.length === 3) return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    if (p.length === 3) {
+      const year = parseInt(p[0], 10);
+      const month = parseInt(p[1], 10) - 1;
+      const day = parseInt(p[2], 10);
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+        return new Date(year, month, day);
+      }
+    }
   }
-  return null;
+  const fallback = new Date(dateStr);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/**
+ * Convierte un string de fecha de baja a objeto Date.
+ */
+function parseFechaBaja(fechaBajaStr) {
+  return parseCustomDate(fechaBajaStr);
+}
+
+/**
+ * Convierte un string de fecha de ingreso a objeto Date.
+ */
+function parseFechaIngreso(fechaIngresoStr) {
+  return parseCustomDate(fechaIngresoStr);
 }
 
 /**
  * Evalúa si un colaborador debe ser visible en los reportes del mes consultado.
- * Si fue dado de baja, se muestra durante el mes de baja (y meses anteriores), pero NO en el mes siguiente.
+ * Reglas:
+ * 1. Si el mes consultado es ANTERIOR a su fecha de ingreso -> NO se muestra (false).
+ * 2. Si fue dado de baja, se muestra hasta el mes de baja (y meses intermedios), pero NO en los meses posteriores (false).
  */
 function isEmployeeVisibleInMonth(employee, targetMonthIndex, targetYear) {
   if (!employee) return false;
+
+  // 1. Validar Fecha de Ingreso
+  if (employee.fechaIngreso) {
+    const ingresoDate = parseCustomDate(employee.fechaIngreso);
+    if (ingresoDate && !isNaN(ingresoDate.getTime())) {
+      const ingresoMonth = ingresoDate.getMonth();
+      const ingresoYear = ingresoDate.getFullYear();
+      if (targetYear < ingresoYear) return false;
+      if (targetYear === ingresoYear && targetMonthIndex < ingresoMonth) return false;
+    }
+  }
+
+  // 2. Validar Fecha de Baja
   const est = String(employee.estado || 'Activo').trim().toLowerCase();
-  if (est !== 'baja') return true;
-  if (!employee.fechaBaja) return false;
+  if (est === 'baja') {
+    if (!employee.fechaBaja) return false;
 
-  const bajaDate = parseFechaBaja(employee.fechaBaja);
-  if (!bajaDate || isNaN(bajaDate.getTime())) return false;
+    const bajaDate = parseFechaBaja(employee.fechaBaja);
+    if (!bajaDate || isNaN(bajaDate.getTime())) return false;
 
-  const bajaMonth = bajaDate.getMonth();
-  const bajaYear = bajaDate.getFullYear();
+    const bajaMonth = bajaDate.getMonth();
+    const bajaYear = bajaDate.getFullYear();
 
-  if (targetYear < bajaYear) return true;
-  if (targetYear === bajaYear && targetMonthIndex <= bajaMonth) return true;
+    if (targetYear > bajaYear) return false;
+    if (targetYear === bajaYear && targetMonthIndex > bajaMonth) return false;
+  }
 
-  return false;
+  return true;
 }
 
 /**
- * Obtiene el estado del colaborador ('ACTIVO' o 'BAJA') para una fecha específica ('DD/MM/YYYY').
+ * Obtiene el estado del colaborador ('ACTIVO', 'PREVIO_INGRESO' o 'BAJA') para una fecha específica ('DD/MM/YYYY').
  */
 function getEmployeeStatusForDate(employee, dateStr) {
   if (!employee) return 'INACTIVO';
-  const est = String(employee.estado || 'Activo').trim().toLowerCase();
-  if (est !== 'baja') return 'ACTIVO';
-  if (!employee.fechaBaja) return 'BAJA';
-
-  const bajaDate = parseFechaBaja(employee.fechaBaja);
-  if (!bajaDate || isNaN(bajaDate.getTime())) return 'ACTIVO';
 
   const parts = dateStr.split('/');
   if (parts.length !== 3) return 'ACTIVO';
   const targetDate = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+  targetDate.setHours(0, 0, 0, 0);
 
-  bajaDate.setHours(0,0,0,0);
-  targetDate.setHours(0,0,0,0);
+  // 1. Validar si la fecha consultada es ANTERIOR a la fecha de ingreso
+  if (employee.fechaIngreso) {
+    const ingresoDate = parseCustomDate(employee.fechaIngreso);
+    if (ingresoDate && !isNaN(ingresoDate.getTime())) {
+      ingresoDate.setHours(0, 0, 0, 0);
+      if (targetDate.getTime() < ingresoDate.getTime()) {
+        return 'PREVIO_INGRESO'; // Aún no pertenecía a la empresa en esta fecha
+      }
+    }
+  }
 
-  return targetDate.getTime() >= bajaDate.getTime() ? 'BAJA' : 'ACTIVO';
+  // 2. Validar si la fecha consultada es IGUAL o POSTERIOR a la fecha de baja
+  const est = String(employee.estado || 'Activo').trim().toLowerCase();
+  if (est === 'baja') {
+    if (!employee.fechaBaja) return 'BAJA';
+    const bajaDate = parseFechaBaja(employee.fechaBaja);
+    if (bajaDate && !isNaN(bajaDate.getTime())) {
+      bajaDate.setHours(0, 0, 0, 0);
+      if (targetDate.getTime() >= bajaDate.getTime()) {
+        return 'BAJA'; // Ya estaba dado de baja en esta fecha
+      }
+    }
+  }
+
+  return 'ACTIVO';
 }
 
 /**
@@ -176,22 +237,36 @@ function getEmployeeStatusForDate(employee, dateStr) {
  */
 function isEmployeeActive(employee, targetDateStr = null) {
   if (!employee) return false;
-  const est = String(employee.estado || 'Activo').trim().toLowerCase();
-  if (est !== 'baja') return true;
-  if (!employee.fechaBaja) return false;
 
   if (targetDateStr) {
     return getEmployeeStatusForDate(employee, targetDateStr) === 'ACTIVO';
   }
 
   const today = new Date();
-  today.setHours(0,0,0,0);
-  const bajaDate = parseFechaBaja(employee.fechaBaja);
-  if (bajaDate && !isNaN(bajaDate.getTime())) {
-    bajaDate.setHours(0,0,0,0);
-    return today.getTime() < bajaDate.getTime();
+  today.setHours(0, 0, 0, 0);
+
+  // Validar ingreso
+  if (employee.fechaIngreso) {
+    const ingresoDate = parseCustomDate(employee.fechaIngreso);
+    if (ingresoDate && !isNaN(ingresoDate.getTime())) {
+      ingresoDate.setHours(0, 0, 0, 0);
+      if (today.getTime() < ingresoDate.getTime()) return false;
+    }
   }
-  return false;
+
+  // Validar baja
+  const est = String(employee.estado || 'Activo').trim().toLowerCase();
+  if (est === 'baja') {
+    if (!employee.fechaBaja) return false;
+    const bajaDate = parseFechaBaja(employee.fechaBaja);
+    if (bajaDate && !isNaN(bajaDate.getTime())) {
+      bajaDate.setHours(0, 0, 0, 0);
+      return today.getTime() < bajaDate.getTime();
+    }
+    return false;
+  }
+
+  return true;
 }
 let tardinessTolerance = 5; 
 let cachedAgentHistory = [];
@@ -949,7 +1024,7 @@ function registerAttendanceAction(action) {
 
 }
 // Enviar nuevo empleado a Google Sheets
-function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd, pin = "1234", weeklySchedule = "") {
+function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart, workEnd, breakStart, breakEnd, pin = "1234", weeklySchedule = "", fechaIngreso = "") {
   // Si no hay URL de Sheet configurada, no hace nada
   if (!googleScriptUrl) return; 
 
@@ -968,7 +1043,8 @@ function sendRegistrationToGoogleSheets(dni, name, age, gender, role, workStart,
     breakStart: breakStart,
     breakEnd: breakEnd,
     pin: pin,
-    weeklySchedule: typeof weeklySchedule === 'object' ? JSON.stringify(weeklySchedule) : weeklySchedule
+    weeklySchedule: typeof weeklySchedule === 'object' ? JSON.stringify(weeklySchedule) : weeklySchedule,
+    fechaIngreso: fechaIngreso || getTodayNormalizedDateStr()
   };
   
   fetch(getScriptUrlWithApiKey(), {
@@ -1073,7 +1149,8 @@ function syncEmployeesFromGoogleSheets() {
             breakEnd: emp.breakEnd || "14:00",
             weeklySchedule: parsedWeekly,
             estado: emp.estado || "Activo",
-            fechaBaja: emp.fechaBaja || ""
+            fechaBaja: emp.fechaBaja || "",
+            fechaIngreso: emp.fechaIngreso || emp.fecha || ""
           };
           
           // Asegurarse de que tenga estado de asistencia básico si no existía
@@ -1287,7 +1364,8 @@ function syncInitialData() {
               breakEnd: emp.breakEnd || "14:00",
               weeklySchedule: parsedWeekly,
               estado: emp.estado || "Activo",
-              fechaBaja: emp.fechaBaja || ""
+              fechaBaja: emp.fechaBaja || "",
+              fechaIngreso: emp.fechaIngreso || emp.fecha || ""
             };
             if (!attendanceState[emp.dni]) {
               attendanceState[emp.dni] = { action: 'Desconectado', timestamp: null, history: [] };
@@ -1860,6 +1938,7 @@ function setupEventListeners() {
       const finalBreakEnd = isFlexible ? "—" : breakEnd;
       const finalWeeklySchedule = isFlexible ? "flexible" : weeklySchedule;
 
+      const todayStr = getTodayNormalizedDateStr();
       employeesDatabase[dni] = {
         name: name,
         role: role,
@@ -1870,7 +1949,10 @@ function setupEventListeners() {
         workEnd: finalWorkEnd,
         breakStart: finalBreakStart,
         breakEnd: finalBreakEnd,
-        weeklySchedule: finalWeeklySchedule
+        weeklySchedule: finalWeeklySchedule,
+        estado: "Activo",
+        fechaBaja: "",
+        fechaIngreso: todayStr
       };
 
       // 2. Inicializar su estado de asistencia básico
@@ -1884,7 +1966,7 @@ function setupEventListeners() {
       saveState();
       updateAdminView();
       if (googleScriptUrl) {
-         sendRegistrationToGoogleSheets(dni, name, age, gender, role, finalWorkStart, finalWorkEnd, finalBreakStart, finalBreakEnd, "1234", finalWeeklySchedule);
+         sendRegistrationToGoogleSheets(dni, name, age, gender, role, finalWorkStart, finalWorkEnd, finalBreakStart, finalBreakEnd, "1234", finalWeeklySchedule, todayStr);
       }
       
       // Limpiar formulario y lanzar éxito
@@ -4707,7 +4789,11 @@ function renderConsolidatedTable(history) {
         
         const empStatusForDate = getEmployeeStatusForDate(employee, dateStr);
 
-        if (empStatusForDate === 'BAJA') {
+        if (empStatusForDate === 'PREVIO_INGRESO') {
+          cellClass = 'cell-previo-ingreso';
+          cellText = '—';
+          tooltip += `\nColaborador aún no ingresaba a la empresa (Ingreso: ${employee.fechaIngreso || ''})`;
+        } else if (empStatusForDate === 'BAJA') {
           cellClass = 'cell-baja';
           cellText = 'Baja';
           tooltip += `\nColaborador dado de baja (${employee.fechaBaja || ''})`;
@@ -5755,7 +5841,9 @@ function exportConsolidatedExcel() {
         }
       } else {
         const empStatusForDate = getEmployeeStatusForDate(employee, dateStr);
-        if (empStatusForDate === 'BAJA') {
+        if (empStatusForDate === 'PREVIO_INGRESO') {
+          row.push("—");
+        } else if (empStatusForDate === 'BAJA') {
           row.push("Baja");
         } else if (justification) {
           row.push(`Justificado: ${justification.type}`);
@@ -6116,7 +6204,10 @@ function renderDailySummaryTable(history) {
 
     } else {
       const empStatusForDate = getEmployeeStatusForDate(employee, selectedDateStr);
-      if (empStatusForDate === 'BAJA') {
+      if (empStatusForDate === 'PREVIO_INGRESO') {
+        statusBadge = `<span class="table-status-badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid #cbd5e1;" title="El colaborador aún no ingresaba a la empresa (Ingreso: ${employee.fechaIngreso || ''})">Sin Contrato</span>`;
+        rowClass = 'row-previo-ingreso';
+      } else if (empStatusForDate === 'BAJA') {
         statusBadge = `<span class="table-status-badge Desconectado" style="background: rgba(148, 163, 184, 0.2); color: #64748b; border: 1px solid #cbd5e1;">Baja</span>`;
         rowClass = 'row-baja';
       } else if (justification) {
@@ -6286,7 +6377,12 @@ function exportDailySummaryExcel() {
         statusText = isFlexible ? "Asistió (Flexible)" : "Asistió Normal";
       }
     } else {
-      if (justification) {
+      const empStatusForDate = getEmployeeStatusForDate(employee, selectedDateStr);
+      if (empStatusForDate === 'PREVIO_INGRESO') {
+        statusText = "Sin Contrato";
+      } else if (empStatusForDate === 'BAJA') {
+        statusText = "Baja";
+      } else if (justification) {
         statusText = `Justificado: ${justification.type}`;
       } else if (isHoliday) {
         statusText = "Feriado";
@@ -6521,8 +6617,8 @@ function renderMonthlyTable(history) {
       const dayOfWeek = d.getDay();
 
       const empStatusForDate = getEmployeeStatusForDate(employee, dateStr);
-      if (empStatusForDate === 'BAJA') {
-        // Dado de baja en esta fecha: no genera día laborable ni falta
+      if (empStatusForDate === 'BAJA' || empStatusForDate === 'PREVIO_INGRESO') {
+        // Previo a su ingreso o dado de baja en esta fecha: no genera día laborable ni falta
         continue;
       }
 
@@ -6786,7 +6882,7 @@ function exportMonthlyExcel() {
       const dayOfWeek = d.getDay();
 
       const empStatusForDate = getEmployeeStatusForDate(employee, dateStr);
-      if (empStatusForDate === 'BAJA') {
+      if (empStatusForDate === 'BAJA' || empStatusForDate === 'PREVIO_INGRESO') {
         continue;
       }
 
@@ -7770,7 +7866,12 @@ function openAgentHistoryModal(isCurrentMonth = true) {
         statusBadge = `<span class="table-status-badge Fin-Refrigerio">Asistió (Flex)</span>`;
       }
     } else {
-      if (justification) {
+      const empStatusForDate = getEmployeeStatusForDate(employee, dateStr);
+      if (empStatusForDate === 'PREVIO_INGRESO') {
+        statusBadge = `<span class="table-status-badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid #cbd5e1;">Sin contrato</span>`;
+      } else if (empStatusForDate === 'BAJA') {
+        statusBadge = `<span class="table-status-badge Desconectado" style="background: rgba(148, 163, 184, 0.2); color: #64748b; border: 1px solid #cbd5e1;">Baja</span>`;
+      } else if (justification) {
         statusBadge = `<span class="table-status-badge Inicio-Refrigerio" title="${justification.details}">Justificado: ${justification.type}</span>`;
       } else if (isHoliday) {
         statusBadge = `<span class="table-status-badge Fin-Refrigerio">Feriado</span>`;
@@ -8452,6 +8553,13 @@ function loadGerencialReport() {
 
     dnis.forEach(dni => {
       const emp = employeesDatabase[dni];
+      if (!emp) return;
+
+      const empStatusForDate = getEmployeeStatusForDate(emp, dateStr);
+      if (empStatusForDate === 'BAJA' || empStatusForDate === 'PREVIO_INGRESO') {
+        return;
+      }
+
       const dObj = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
       const dow = String(dObj.getDay()); // 0=Dom...6=Sab
 
@@ -9743,6 +9851,12 @@ function renderValidationsView() {
       const dateStr = getTodayNormalizedDateStr(curr);
       const dayOfWeek = curr.getDay();
 
+      const empStatusForDate = getEmployeeStatusForDate(emp, dateStr);
+      if (empStatusForDate === 'BAJA' || empStatusForDate === 'PREVIO_INGRESO') {
+        curr.setDate(curr.getDate() + 1);
+        continue;
+      }
+
       const justification = justificacionesDatabase.find(j => 
         String(j.dni || '').replace(/'/g, '').trim() === cleanDni && 
         normalizeDateStr(j.dateStr) === dateStr
@@ -9879,6 +9993,12 @@ function renderValidationsView() {
     while (curr6m <= dEnd && curr6m <= now) {
       const dateStr6m = getTodayNormalizedDateStr(curr6m);
       const dayOfWeek6m = curr6m.getDay();
+
+      const empStatusForDate6m = getEmployeeStatusForDate(emp, dateStr6m);
+      if (empStatusForDate6m === 'BAJA' || empStatusForDate6m === 'PREVIO_INGRESO') {
+        curr6m.setDate(curr6m.getDate() + 1);
+        continue;
+      }
 
       const justification = justificacionesDatabase.find(j => 
         String(j.dni || '').replace(/'/g, '').trim() === cleanDni && 
@@ -10600,6 +10720,11 @@ function loadHistoricalMultiMonthReport() {
 
       targetEmployees.forEach(emp => {
         const cleanDni = String(emp.dni || '').replace(/'/g, '').trim();
+
+        const empStatusForDate = getEmployeeStatusForDate(emp, dayDateStr);
+        if (empStatusForDate === 'BAJA' || empStatusForDate === 'PREVIO_INGRESO') {
+          return;
+        }
 
         // 2. Días de Descanso Semanal según Horario del Colaborador
         let isRestDay = false;

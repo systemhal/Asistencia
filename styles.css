@@ -883,6 +883,8 @@ input::-webkit-calendar-picker-indicator:hover {
 .cell-holiday { background: rgba(6, 182, 212, 0.08) !important; color: #06b6d4 !important; text-align: center; cursor: help; }
 .cell-rest { background: rgba(100, 116, 139, 0.05) !important; color: var(--text-muted) !important; text-align: center; font-style: italic; cursor: help; }
 .cell-baja { background: rgba(148, 163, 184, 0.15) !important; color: #64748b !important; text-align: center; font-weight: 600; font-family: var(--font-display); cursor: help; }
+.cell-previo-ingreso { background: rgba(148, 163, 184, 0.05) !important; color: #94a3b8 !important; text-align: center; font-weight: 500; font-family: var(--font-display); cursor: help; }
+.row-previo-ingreso { opacity: 0.75; }
 
 /* Totales fijos del consolidado */
 .cell-total-worked { font-weight: 700 !important; font-family: var(--font-display); color: #2563eb !important; text-align: center; background: rgba(37, 99, 235, 0.06) !important; border-left: 2px solid rgba(37, 99, 235, 0.15) !important; }

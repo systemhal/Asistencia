@@ -223,8 +223,9 @@ function doPost(e) {
     // 1. Registrar Nuevo Colaborador
     if (action === "Registrar_Personal") {
       var sheet = ss.getSheetByName("Personal");
+      var regDate = postData.fechaIngreso ? formatDateValue(postData.fechaIngreso) : Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
       sheet.appendRow([
-        Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy"), // 1. Fecha (A)
+        regDate, // 1. Fecha (A)
         "'" + postData.employeeId,      // 2. Dni (B)
         postData.employeeName,    // 3. Nombre Completo (C)
         postData.age || "—",      // 4. Edad (D)
@@ -422,6 +423,7 @@ function getEmployeesData(ss) {
   
   for (var i = 1; i < data.length; i++) {
     employees.push({
+      fechaIngreso: formatDateValue(data[i][0]), // Columna A (Fecha de Ingreso/Registro)
       dni: getSafeDni(data[i][1]), // Columna B (Dni)
       name: data[i][2],        // Columna C (Nombre Completo)
       age: data[i][3],        // Columna D (Edad)
