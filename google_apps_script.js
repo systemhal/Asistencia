@@ -134,13 +134,14 @@ function doGet(e) {
     // 1. Obtener base de datos unificada (Acción optimizada principal)
     if (action === 'get_initial_data') {
       var props = PropertiesService.getScriptProperties();
+      var maxRows = e.parameter.maxRows ? parseInt(e.parameter.maxRows, 10) : 3000;
       return getJsonResponse({
         status: "ok",
         data: {
           employees: getEmployeesData(ss),
           justificaciones: getJustificacionesData(ss),
           feriados: getFeriadosData(ss),
-          history: getHistoryData(ss),
+          history: getHistoryData(ss, null, maxRows),
           config: {
             security_block_mobile: props.getProperty('security_block_mobile') === 'true',
             security_restrict_pcs: props.getProperty('security_restrict_pcs') === 'true',
@@ -170,7 +171,14 @@ function doGet(e) {
     // 5. Obtener historial general o por empleado
     if (action === 'get_history') {
       var dni = e.parameter.dni;
-      return getJsonResponse({ status: "ok", data: getHistoryData(ss, dni) });
+      var maxRows = e.parameter.maxRows ? parseInt(e.parameter.maxRows, 10) : 3000;
+      return getJsonResponse({ status: "ok", data: getHistoryData(ss, dni, maxRows) });
+    }
+
+    // 6. Limpiar duplicados de asistencia
+    if (action === 'limpiar_duplicados') {
+      var resLimpieza = limpiarDuplicadosAsistencia();
+      return getJsonResponse({ status: "ok", message: resLimpieza });
     }
     
     return getJsonResponse({ status: "error", message: "Acción GET no reconocida." });
@@ -385,24 +393,100 @@ function doPost(e) {
       return getJsonResponse({ status: "ok", message: "Feriado eliminado." });
     }
     
-    // 8. Marcas de Asistencia (Acciones: Ingreso, Inicio Refrigerio, Fin Refrigerio, Salida)
+    // 8. Limpiar Duplicados de Asistencia
+    if (action === "Limpiar_Duplicados") {
+      var resLimpiar = limpiarDuplicadosAsistencia();
+      return getJsonResponse({ status: "ok", message: resLimpiar });
+    }
+
+    // 9. Marcas de Asistencia (Acciones válidas: Ingreso, Inicio Refrigerio, Fin Refrigerio, Salida)
+    var VALID_ATTENDANCE_ACTIONS = ["Ingreso", "Inicio Refrigerio", "Fin Refrigerio", "Salida"];
+    if (VALID_ATTENDANCE_ACTIONS.indexOf(action) === -1) {
+      return getJsonResponse({ status: "error", message: "Acción no reconocida o no permitida: " + action });
+    }
+
+    var cleanEmpId = getSafeDni(postData.employeeId);
+    if (!cleanEmpId) {
+      return getJsonResponse({ status: "error", message: "DNI de colaborador no proporcionado o inválido." });
+    }
+
     var attendanceSheet = ss.getSheetByName("Asistencia");
+    if (!attendanceSheet) {
+      return getJsonResponse({ status: "error", message: "Hoja 'Asistencia' no encontrada." });
+    }
     
-    // Determinar la fecha y hora actual si no viene customizado
+    // Determinar la fecha y hora exacta
     var now = new Date();
-    var formattedDate = postData.customDate || Utilities.formatDate(now, Session.getScriptTimeZone(), "dd/MM/yyyy");
-    var formattedTime = postData.customTime || Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss");
-    var timestamp = postData.customTimestamp || now.getTime();
+    var serverDate = Utilities.formatDate(now, Session.getScriptTimeZone(), "dd/MM/yyyy");
+    var serverTime = Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss");
+
+    // Fecha: Asegurar que nunca esté vacía ni inválida
+    var formattedDate = String(postData.customDate || "").trim();
+    if (!formattedDate || formattedDate === "Invalid Date" || formattedDate === "---") {
+      formattedDate = serverDate;
+    }
+
+    // Hora: Asegurar que NUNCA esté vacía ni sea "Invalid Date"
+    var formattedTime = String(postData.customTime || "").trim();
+    if (!formattedTime || formattedTime === "Invalid Date" || formattedTime === "---" || formattedTime.length < 4) {
+      formattedTime = serverTime;
+    }
+
+    var timestamp = Number(postData.customTimestamp);
+    if (!timestamp || isNaN(timestamp) || timestamp <= 0) {
+      timestamp = now.getTime();
+    }
+
+    var device = String(postData.device || "---").trim();
+    var details = String(postData.details || "Registrado vía AsistenciaPro Web").trim();
+
+    // ── CONTROL ESTRICTO CONTRA DUPLICADOS (ANTIDUPLICADOS) ──
+    var lastRow = attendanceSheet.getLastRow();
+    if (lastRow > 1) {
+      var rowsToCheck = Math.min(250, lastRow - 1);
+      var startRow = lastRow - rowsToCheck + 1;
+      // Col 1=Fecha (A), Col 2=Hora (B), Col 3=DNI (C), Col 5=Acción (E), Col 7=Timestamp (G)
+      var recentData = attendanceSheet.getRange(startRow, 1, rowsToCheck, 7).getValues();
+
+      for (var r = recentData.length - 1; r >= 0; r--) {
+        var rowDate = formatDateValue(recentData[r][0]);
+        var rowDni = getSafeDni(recentData[r][2]);
+        var rowAction = String(recentData[r][4]).trim();
+        var rowTimestamp = Number(recentData[r][6]) || 0;
+
+        if (rowDni === cleanEmpId && rowDate === formattedDate && rowAction === action) {
+          // Si es marca de "Sistema" (cierre automático) y ya existe la acción para hoy, ignorar siempre
+          if (device === "Sistema" || device.indexOf("Sistema") >= 0) {
+            return getJsonResponse({ 
+              status: "ok", 
+              message: "Cierre automático ya registrado previamente para este colaborador en esta fecha.",
+              duplicateIgnored: true 
+            });
+          }
+
+          // Si el timestamp difiere por menos de 180 segundos (3 minutos), es un clic repetido / reenvío
+          var timeDiff = Math.abs(timestamp - rowTimestamp);
+          if (rowTimestamp > 0 && timeDiff < 180000) {
+            return getJsonResponse({ 
+              status: "ok", 
+              message: "Marca ya registrada recientemente (duplicado ignorado).",
+              duplicateIgnored: true 
+            });
+          }
+        }
+      }
+    }
     
+    // Inserción segura con hora garantizada
     attendanceSheet.appendRow([
       formattedDate,            // 1. Fecha (A)
       formattedTime,            // 2. Hora (B)
-      "'" + postData.employeeId,      // 3. DNI (C)
-      postData.employeeName,    // 4. Nombre Colaborador (D)
+      "'" + cleanEmpId,         // 3. DNI (C)
+      postData.employeeName || cleanEmpId, // 4. Nombre Colaborador (D)
       action,                   // 5. Acción (E)
-      postData.details || "Registrado vía AsistenciaPro Web", // 6. Detalles (F)
+      details,                  // 6. Detalles (F)
       timestamp,                // 7. Timestamp Unix (G)
-      postData.device || "---"  // 8. Dispositivo (H)
+      device                    // 8. Dispositivo (H)
     ]);
     
     return getJsonResponse({ status: "ok", message: "Marca registrada con éxito." });
@@ -482,29 +566,106 @@ function getFeriadosData(ss) {
   return list;
 }
 
-function getHistoryData(ss, filterDni) {
+function getHistoryData(ss, filterDni, maxRows) {
   var sheet = ss.getSheetByName("Asistencia");
   if (!sheet) return [];
   
-  var data = sheet.getDataRange().getValues();
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+
+  // Optimización de lectura: Leer hasta maxRows (por defecto 3500) para evitar timeouts y saturación
+  var limit = maxRows ? parseInt(maxRows, 10) : 3500;
+  var rowsToRead = Math.min(lastRow - 1, limit);
+  var startRow = lastRow - rowsToRead + 1;
+
+  var data = sheet.getRange(startRow, 1, rowsToRead, 8).getValues();
   var history = [];
   
-  for (var i = 1; i < data.length; i++) {
+  for (var i = 0; i < data.length; i++) {
     var dni = getSafeDni(data[i][2]); // Columna C (DNI)
     if (filterDni && dni !== String(filterDni)) continue;
     
+    var rawHora = data[i][1];
+    var formattedHora = formatLongTimeValue(rawHora);
+    var ts = Number(data[i][6]) || 0;
+
+    // Blindaje: Si la hora en la hoja está vacía pero existe Timestamp Unix, reconstruir la hora exacta
+    if ((!formattedHora || formattedHora === "") && ts > 0) {
+      try {
+        formattedHora = Utilities.formatDate(new Date(ts), Session.getScriptTimeZone(), "HH:mm:ss");
+      } catch(e) {}
+    }
+    
     history.push({
-      dni: dni,                          // DNI
-      name: data[i][3],                  // Nombre Colaborador
-      action: data[i][4],                // Acción
+      dni: dni,                                  // DNI
+      name: data[i][3],                          // Nombre Colaborador
+      action: data[i][4],                        // Acción
       dateStr: formatDateValue(data[i][0]),     // Fecha (A)
-      timeStr: formatLongTimeValue(data[i][1]), // Hora (B)
-      timestamp: Number(data[i][6]),     // Timestamp Unix (G)
-      details: data[i][5],               // Detalles (F)
-      device: data[i][7]                 // Dispositivo (H)
+      timeStr: formattedHora,                    // Hora (B)
+      timestamp: ts,                             // Timestamp Unix (G)
+      details: data[i][5],                       // Detalles (F)
+      device: data[i][7]                         // Dispositivo (H)
     });
   }
   return history;
+}
+
+// ── FUNCIÓN DE MANTENIMIENTO: LIMPIAR DUPLICADOS EN LA HOJA ASISTENCIA ──
+function limpiarDuplicadosAsistencia() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Asistencia");
+  if (!sheet) return "Hoja 'Asistencia' no encontrada.";
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return "No hay datos que depurar.";
+
+  var data = sheet.getRange(1, 1, lastRow, 8).getValues();
+  var cleanRows = [data[0]]; // Cabecera intacta
+  var seenKeys = {};
+  var duplicatesCount = 0;
+  var fixedHoursCount = 0;
+
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var dateStr = formatDateValue(row[0]);
+    var horaStr = formatLongTimeValue(row[1]);
+    var dni = getSafeDni(row[2]);
+    var action = String(row[4]).trim();
+    var ts = Number(row[6]) || 0;
+
+    if (!dni || !action || action === "login") {
+      duplicatesCount++;
+      continue; // Omitir filas sin DNI o marcas basura
+    }
+
+    // Reparar hora vacía si existe timestamp
+    if ((!horaStr || horaStr === "") && ts > 0) {
+      try {
+        horaStr = Utilities.formatDate(new Date(ts), Session.getScriptTimeZone(), "HH:mm:ss");
+        row[1] = horaStr;
+        fixedHoursCount++;
+      } catch(e) {}
+    }
+
+    // Clave de unicidad: DNI + Fecha + Acción + Bloque de 3 minutos
+    var timeSlot = ts > 0 ? Math.floor(ts / 180000) : horaStr.substring(0, 5);
+    var key = dni + "|" + dateStr + "|" + action + "|" + timeSlot;
+
+    if (seenKeys[key]) {
+      duplicatesCount++;
+    } else {
+      seenKeys[key] = true;
+      cleanRows.push(row);
+    }
+  }
+
+  if (duplicatesCount > 0 || fixedHoursCount > 0) {
+    sheet.getRange(1, 1, lastRow, 8).clearContent();
+    sheet.getRange(1, 1, cleanRows.length, 8).setValues(cleanRows);
+    return "Limpieza completada: Se eliminaron " + duplicatesCount + " filas duplicadas/inválidas y se repararon " + fixedHoursCount + " horas vacías. Quedaron " + (cleanRows.length - 1) + " registros válidos.";
+  } else {
+    return "La hoja Asistencia ya se encuentra limpia. No se encontraron duplicados.";
+  }
 }
 
 // ── SISTEMA DE SINCRONIZACIÓN EN LA PESTAÑA "HORARIOS" (OPTIMIZADO BATCH) ──

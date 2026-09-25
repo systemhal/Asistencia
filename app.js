@@ -49,6 +49,8 @@ const AUTO_SYNC_AGENT_MS  = 45000;  // Vista Agente: cada 45 segundos
 let isSyncing = false;              // Bandera para evitar peticiones solapadas
 let googleScriptUrl = "https://script.google.com/macros/s/AKfycbxh-EejSNaokvwz44x-HPemalHWKtnPsq51l4u8YJ1hOZgPJK6LvORA_YpzCoL8lHpKFg/exec";
 let googleScriptApiKey = "AsistenciaPro_SecuredKey_2026";
+let hasInitialCloudSyncCompleted = false;
+const processedAutoCloses = new Set();
 
 function getScriptUrlWithApiKey(action = '') {
   if (!googleScriptUrl) return '';
@@ -1308,9 +1310,19 @@ function syncInitialData() {
   updateCloudStatus('syncing');
   
   return fetch(getScriptUrlWithApiKey('get_initial_data'))
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.text();
+    })
+    .then(text => {
+      if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html>')) {
+        throw new Error("Respuesta no-JSON de Google Sheets (posible timeout o error de Drive)");
+      }
+      return JSON.parse(text);
+    })
     .then(res => {
       if (res.status === "ok" && res.data) {
+        hasInitialCloudSyncCompleted = true;
         const { employees, justificaciones, feriados, history, config } = res.data;
         
         // 0. Cargar y aplicar configuración global de seguridad
@@ -1438,13 +1450,18 @@ function syncInitialData() {
       console.warn("Fallo la sincronización unificada. Usando fallback individual...", err);
       updateCloudStatus('syncing');
       return syncEmployeesFromGoogleSheets().then(() => {
-        syncJustificacionesFromGoogleSheets();
-        syncFeriadosFromGoogleSheets();
-        syncAllAttendanceStatesFromHistory();
+        return Promise.all([
+          syncJustificacionesFromGoogleSheets().catch(() => {}),
+          syncFeriadosFromGoogleSheets().catch(() => {})
+        ]);
+      }).then(() => {
+        return syncAllAttendanceStatesFromHistory();
+      }).then(() => {
+        hasInitialCloudSyncCompleted = true;
         updateCloudStatus('connected');
       }).catch(fallbackErr => {
         updateCloudStatus('error');
-        throw fallbackErr;
+        console.error("Error en sincronización fallback:", fallbackErr);
       });
     });
 }
@@ -2143,16 +2160,20 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, s
     showToast('warning', 'Sincronizando...', 'Registrando marca de asistencia...');
   }
   
+  const now = new Date();
   const payload = {
     action: action,
     apiKey: googleScriptApiKey,
     employeeId: dni,
     employeeName: name,
     details: "Registrado vía AsistenciaPro Web",
-    device: obtenerDispositivo()
+    device: obtenerDispositivo(),
+    customDate: now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' }),
+    customTime: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    customTimestamp: now.getTime()
   };
 
-  if (customTimeObj) {
+  if (customTimeObj && customTimeObj instanceof Date && !isNaN(customTimeObj.getTime())) {
     payload.customDate = customTimeObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
     payload.customTime = customTimeObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     payload.customTimestamp = customTimeObj.getTime();
@@ -2484,6 +2505,38 @@ function testGoogleScriptConnection() {
     showToast('error', 'Error de conexión', 'No se pudo establecer contacto con el script.');
   });
 }
+
+function cleanDuplicatesInGoogleSheets() {
+  if (!googleScriptUrl) {
+    showToast('error', 'Error', 'URL de Google Apps Script no configurada.');
+    return;
+  }
+  showCustomConfirm({
+    title: 'Depurar Duplicados en Google Sheets',
+    message: '¿Deseas buscar y eliminar filas duplicadas en la pestaña "Asistencia" de tu Google Sheet y reparar horas en blanco?<br><br><span style="font-size: 0.85rem; color: var(--text-muted);">Esta acción es segura: conservará una sola copia de cada marca y reparará las celdas de hora vacías.</span>',
+    type: 'warning',
+    acceptText: 'Sí, Depurar Ahora'
+  }).then(confirmed => {
+    if (confirmed) {
+      showToast('warning', 'Depurando...', 'Limpiando duplicados en Google Sheets...');
+      fetch(`${getScriptUrlWithApiKey('limpiar_duplicados')}`)
+        .then(res => res.json())
+        .then(res => {
+          if (res.status === 'ok') {
+            showToast('success', 'Limpieza Exitosa', res.message);
+            syncInitialData();
+          } else {
+            showToast('error', 'Error', res.message || 'No se pudo completar la limpieza.');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('error', 'Error de Conexión', 'No se pudo contactar con el script para limpiar.');
+        });
+    }
+  });
+}
+window.cleanDuplicatesInGoogleSheets = cleanDuplicatesInGoogleSheets;
 
 /* ==========================================================================
    NAVIGATION VIEW CONTROLLER
@@ -2951,6 +3004,12 @@ function autoClosePendingSessions() {
       stateChanged = true;
     }
 
+    // Si la sincronización inicial de la nube aún no se ha completado,
+    // solo resetear el estado activo de hoy pero no enviar marcas automáticas a Google Sheets
+    if (!hasInitialCloudSyncCompleted) {
+      return;
+    }
+
     // --- CIERRE AUTOMÁTICO PERSISTENTE: Detectar días pasados con marcas incompletas ---
     const employee = employeesDatabase[dni] || findEmployeeByDni(dni);
     if (!employee) return;
@@ -2999,19 +3058,20 @@ function autoClosePendingSessions() {
       // Si es día de descanso, no autocompletar
       if (daySched.isRestDay) return;
 
-      const workEndStr = daySched.workEnd || employee.workEnd || "17:00";
+      const workEndStr = (daySched.workEnd && daySched.workEnd !== '—' && daySched.workEnd !== '---') ? daySched.workEnd : (employee.workEnd || "17:00");
       const [endH, endM] = workEndStr.split(':').map(Number);
       const autoCloseDate = new Date(dayObj);
-      autoCloseDate.setHours(endH, endM || 0, 0, 0);
+      autoCloseDate.setHours(isNaN(endH) ? 17 : endH, isNaN(endM) ? 0 : endM, 0, 0);
       const autoCloseTimestamp = autoCloseDate.getTime();
       const autoCloseDateStr = normDate.split('/').map(v => parseInt(v, 10)).join('/');
 
       // 1. Si tiene Inicio Refrigerio pero no Fin Refrigerio, cerrar el break 1 hora después del inicio
       if (hasBreakIn && !hasBreakOut) {
         const breakInMark = dayMarks.find(m => m.action === 'Inicio Refrigerio');
-        const breakEndTimestamp = breakInMark.timestamp + 3600000; // +1 hora
+        const breakInTs = Number(breakInMark.timestamp) || 0;
+        const breakEndTimestamp = breakInTs > 0 ? (breakInTs + 3600000) : autoCloseTimestamp;
         const breakEndDate = new Date(breakEndTimestamp);
-        const breakEndTimeStr = breakEndDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const breakEndTimeStr = !isNaN(breakEndDate.getTime()) ? breakEndDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "14:00:00";
 
         const breakOutLogItem = {
           action: 'Fin Refrigerio',
@@ -3022,28 +3082,33 @@ function autoClosePendingSessions() {
           device: 'Sistema'
         };
 
-        // Agregar al historial local si no existe
         const existsBreakOut = state.history.some(h =>
           h.action === 'Fin Refrigerio' && normalizeDateStr(h.dateStr) === normDate
         );
+        const closeKeyBreak = `${cleanDni}|${normDate}|Fin Refrigerio`;
         if (!existsBreakOut) {
           state.history.push(breakOutLogItem);
           stateChanged = true;
-          pendingAutoCloses.push({
-            dni: cleanDni,
-            name: employee.name,
-            action: 'Fin Refrigerio',
-            customTime: breakEndDate,
-            dateStr: breakInMark.dateStr
-          });
+          if (!processedAutoCloses.has(closeKeyBreak) && !isNaN(breakEndDate.getTime())) {
+            processedAutoCloses.add(closeKeyBreak);
+            pendingAutoCloses.push({
+              dni: cleanDni,
+              name: employee.name,
+              action: 'Fin Refrigerio',
+              customTime: breakEndDate,
+              dateStr: breakInMark.dateStr
+            });
+          }
         }
       }
 
       // 2. Registrar Salida automática al fin del turno programado
+      const closeKeySalida = `${cleanDni}|${normDate}|Salida`;
+      const salidaTimeStr = !isNaN(autoCloseDate.getTime()) ? autoCloseDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "17:00:00";
       const salidaLogItem = {
         action: 'Salida',
         timestamp: autoCloseTimestamp,
-        timeStr: autoCloseDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        timeStr: salidaTimeStr,
         dateStr: autoCloseDateStr,
         details: 'Cierre automático por omisión de salida',
         device: 'Sistema'
@@ -3055,13 +3120,16 @@ function autoClosePendingSessions() {
       if (!existsSalida) {
         state.history.push(salidaLogItem);
         stateChanged = true;
-        pendingAutoCloses.push({
-          dni: cleanDni,
-          name: employee.name,
-          action: 'Salida',
-          customTime: autoCloseDate,
-          dateStr: autoCloseDateStr
-        });
+        if (!processedAutoCloses.has(closeKeySalida) && !isNaN(autoCloseDate.getTime())) {
+          processedAutoCloses.add(closeKeySalida);
+          pendingAutoCloses.push({
+            dni: cleanDni,
+            name: employee.name,
+            action: 'Salida',
+            customTime: autoCloseDate,
+            dateStr: autoCloseDateStr
+          });
+        }
       }
     });
   });
@@ -3070,10 +3138,11 @@ function autoClosePendingSessions() {
     saveState();
   }
 
-  // Enviar marcas de cierre automático a Google Sheets (de forma silenciosa, sin toasts individuales)
+  // Enviar marcas de cierre automático a Google Sheets (solo una vez por jornada)
   if (pendingAutoCloses.length > 0 && googleScriptUrl) {
-    console.log(`[AutoClose] Persistiendo ${pendingAutoCloses.length} marca(s) de cierre automático en Google Sheets...`);
+    console.log(`[AutoClose] Persistiendo ${pendingAutoCloses.length} marca(s) de cierre automático no registradas en Google Sheets...`);
     pendingAutoCloses.forEach(item => {
+      if (!item.customTime || isNaN(item.customTime.getTime())) return;
       const payload = {
         action: item.action,
         apiKey: googleScriptApiKey,
@@ -4476,28 +4545,23 @@ function renderReportTable(history, employee) {
 
 function fetchAllHistoryFromGoogleSheets() {
   return fetch(getScriptUrlWithApiKey('get_history'))
-    .then(res => res.json())
     .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.text();
+    })
+    .then(text => {
+      if (text.trim().startsWith('<') || text.includes('<!DOCTYPE html>')) {
+        throw new Error("Respuesta no-JSON de Google Sheets");
+      }
+      const res = JSON.parse(text);
       if (res.status === "ok" && Array.isArray(res.data)) {
         return res.data;
       }
-      throw new Error("Respuesta inválida o script antiguo");
+      throw new Error(res.message || "Respuesta inválida de Google Sheets");
     })
     .catch(err => {
-      console.warn("Fallo en get_history global. Intentando carga paralela...", err);
-      const dniList = Object.keys(employeesDatabase);
-      const promises = dniList.map(dni => 
-        fetch(`${getScriptUrlWithApiKey('get_history')}&dni=${encodeURIComponent(dni)}`)
-          .then(res => res.json())
-          .then(res => {
-            if (res.status === "ok" && Array.isArray(res.data)) {
-              return res.data.map(item => ({ ...item, dni: dni }));
-            }
-            return [];
-          })
-          .catch(() => [])
-      );
-      return Promise.all(promises).then(results => results.flat());
+      console.warn("Fallo al obtener historial general de la nube. Usando respaldo local:", err);
+      return fetchAllHistoryLocal();
     });
 }
 

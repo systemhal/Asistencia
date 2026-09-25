@@ -1732,7 +1732,7 @@
                   </div>
                 </div>
               </div>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
                 <button id="btn-save-config" class="btn-primary w-full">
                   <span>Guardar Configuración</span>
                   <span class="material-symbols-rounded">save</span>
@@ -1740,6 +1740,10 @@
                 <button id="btn-test-connection" class="btn-outline w-full" disabled>
                   <span>Probar Conexión con Sheet</span>
                   <span class="material-symbols-rounded">sync_alt</span>
+                </button>
+                <button id="btn-clean-duplicates" class="btn-outline w-full" onclick="cleanDuplicatesInGoogleSheets();" style="border-color: rgba(245, 158, 11, 0.4); color: var(--color-warning, #f59e0b);" title="Elimina registros duplicados y repara horas vacías en Google Sheets">
+                  <span>Depurar Duplicados</span>
+                  <span class="material-symbols-rounded">cleaning_services</span>
                 </button>
               </div>
               <div id="test-connection-result" class="test-result-msg" style="margin-top: 10px; text-align: center;"></div>
