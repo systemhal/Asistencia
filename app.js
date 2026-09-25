@@ -62,6 +62,16 @@ function getScriptUrlWithApiKey(action = '') {
   return url;
 }
 
+function formatDateDDMMYYYY(d) {
+  if (!d) return "";
+  const dateObj = (d instanceof Date) ? d : new Date(d);
+  if (isNaN(dateObj.getTime())) return "";
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const yyyy = dateObj.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -2168,13 +2178,13 @@ function sendAttendanceToGoogleSheets(dni, name, action, customTimeObj = null, s
     employeeName: name,
     details: "Registrado vía AsistenciaPro Web",
     device: obtenerDispositivo(),
-    customDate: now.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' }),
+    customDate: formatDateDDMMYYYY(now),
     customTime: now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     customTimestamp: now.getTime()
   };
 
   if (customTimeObj && customTimeObj instanceof Date && !isNaN(customTimeObj.getTime())) {
-    payload.customDate = customTimeObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+    payload.customDate = formatDateDDMMYYYY(customTimeObj);
     payload.customTime = customTimeObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     payload.customTimestamp = customTimeObj.getTime();
     payload.details = "Autocompletado por omisión";
@@ -3063,7 +3073,7 @@ function autoClosePendingSessions() {
       const autoCloseDate = new Date(dayObj);
       autoCloseDate.setHours(isNaN(endH) ? 17 : endH, isNaN(endM) ? 0 : endM, 0, 0);
       const autoCloseTimestamp = autoCloseDate.getTime();
-      const autoCloseDateStr = normDate.split('/').map(v => parseInt(v, 10)).join('/');
+      const autoCloseDateStr = formatDateDDMMYYYY(autoCloseDate);
 
       // 1. Si tiene Inicio Refrigerio pero no Fin Refrigerio, cerrar el break 1 hora después del inicio
       if (hasBreakIn && !hasBreakOut) {
@@ -3150,7 +3160,7 @@ function autoClosePendingSessions() {
         employeeName: item.name,
         details: item.action === 'Salida' ? 'Cierre automático por omisión de salida' : 'Cierre automático por omisión de fin de refrigerio',
         device: 'Sistema',
-        customDate: item.customTime.toLocaleDateString('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' }),
+        customDate: formatDateDDMMYYYY(item.customTime),
         customTime: item.customTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         customTimestamp: item.customTime.getTime()
       };

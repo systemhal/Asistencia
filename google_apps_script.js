@@ -84,6 +84,14 @@ function formatDateValue(val) {
       return Utilities.formatDate(new Date(s), Session.getScriptTimeZone(), "dd/MM/yyyy");
     } catch(e) {}
   }
+  // Normalizar cualquier fecha con barras a DD/MM/YYYY (ej: 25/9/2026 -> 25/09/2026)
+  var parts = s.split('/');
+  if (parts.length === 3) {
+    var dd = parts[0].length === 1 ? '0' + parts[0] : parts[0];
+    var mm = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+    var yyyy = parts[2];
+    return dd + '/' + mm + '/' + yyyy;
+  }
   return s;
 }
 
@@ -420,8 +428,8 @@ function doPost(e) {
     var serverDate = Utilities.formatDate(now, Session.getScriptTimeZone(), "dd/MM/yyyy");
     var serverTime = Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss");
 
-    // Fecha: Asegurar que nunca esté vacía ni inválida
-    var formattedDate = String(postData.customDate || "").trim();
+    // Fecha: Asegurar que nunca esté vacía ni inválida y siempre normalizada a DD/MM/YYYY
+    var formattedDate = postData.customDate ? formatDateValue(postData.customDate) : serverDate;
     if (!formattedDate || formattedDate === "Invalid Date" || formattedDate === "---") {
       formattedDate = serverDate;
     }
